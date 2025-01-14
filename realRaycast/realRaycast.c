@@ -215,7 +215,7 @@ float point_dist(float x1, float y1, float x2, float y2) {
     return sqrt(pow(x1 - x2, 2) + pow(y1 - y2, 2));
 }
 
-xy raycast(float x, float y, float angle, int show_ray) {
+xy raycast(float x, float y, float angle) {
     float c_hx, c_hy;
     float d_hx, d_hy;
     float c_vx, c_vy;
@@ -276,18 +276,6 @@ xy raycast(float x, float y, float angle, int show_ray) {
     c_epsilon_v = (sqrt(pow(c_vx - x, 2) + pow(c_vy - y, 2)) / GRID_SPACING) * diagonal_dist;
     d_epsilon_v = (sqrt(pow(d_vx, 2) + pow(d_vy, 2)) / GRID_SPACING) * diagonal_dist;
 
-    // Horizontal lines (red)
-    /*
-    while (!(
-        (
-            ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) ||
-            ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
-        ) || !(
-            ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < grid_length ) &&
-            ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < grid_height )
-        ))
-    )
-    */
     while (!(
         !(
             ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < grid_length ) &&
@@ -300,21 +288,8 @@ xy raycast(float x, float y, float angle, int show_ray) {
     ) {
         c_hx += d_hx; c_hy += d_hy;
         c_epsilon_h += d_epsilon_h;
-        //if (show_ray) temp_dgp(c_hx - (c_hx % GRID_SPACING) + (GRID_SPACING / 2), c_hy - (c_hy % GRID_SPACING) + (GRID_SPACING / 2), DGP_RED);
     }
 
-    // Vertical lines (blue)
-    /*
-    while (!(
-        (
-            ( get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) ||
-            ( get_grid_bool(c_vx / GRID_SPACING, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool(c_vx / GRID_SPACING, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING) )
-        ) || !(
-            ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < grid_length ) &&
-            ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < grid_height )
-        ))
-    )
-    */
     while (!(
         !(
             ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < grid_length ) &&
@@ -326,7 +301,6 @@ xy raycast(float x, float y, float angle, int show_ray) {
     ) {
         c_vx += d_vx; c_vy += d_vy;
         c_epsilon_v += d_epsilon_v;
-        //if (show_ray) temp_dgp(c_vx - (c_vx % GRID_SPACING) + (GRID_SPACING / 2), c_vy - (c_vy % GRID_SPACING) + (GRID_SPACING / 2), DGP_BLUE);
     }
 
     if (point_dist(c_hx, c_hy, x, y) < point_dist(c_vx, c_vy, x, y)) {
@@ -936,7 +910,7 @@ void render(void) {
             else if (ray_angle >= M_PI * 2) ray_angle -= M_PI * 2;
 
             // Raycast
-            xy hit = raycast(player_x, player_y, ray_angle, show_player_vision);
+            xy hit = raycast(player_x, player_y, ray_angle);
 
             if (view_mode == VIEW_FPS && fp_show_walls) {
                 ray_distances[ray_i] = cos(ray_angle - player_angle) * sqrtf( powf(hit.x - player_x, 2) + powf(hit.y - player_y, 2) );
@@ -1014,18 +988,6 @@ void render(void) {
                 }
                 texture_col += texture_incr;
             }
-
-            /*
-            get texture x increment by texture length / sprite length
-            for column in width of sprite
-            check distance of ray corresponding to sprite column
-            if ray distance is greater than sprite distance, draw
-            */
-            /*
-            SDL_Rect sprite_dim = {sprite->x - (sprite_width / 2), (WINDOW_HEIGHT / 2) - (sprite_height / 2), sprite_width, sprite_height};
-            SDL_SetTextureColorMod(sprites[sprite->sprite_num], sprite_shading, sprite_shading, sprite_shading);
-            SDL_RenderCopy(renderer, sprites[sprite->sprite_num], NULL, &sprite_dim);
-            */
         }
 
         sprite_proj_destroy_all();
