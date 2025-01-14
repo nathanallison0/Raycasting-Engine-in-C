@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include "../SDLStart.h"
-#include "/Users/nallison/Library/CloudStorage/OneDrive-MinutemanRegionalVocationalTechnicalSchoolDistrict/ProgrammingInClassPC/myC/DebugTerminal/DebugTerminal.h"
+#include "../DebugTerminal/DebugTerminal.h"
 #include "./SaveSTates.h"
 #include <string.h>
 
