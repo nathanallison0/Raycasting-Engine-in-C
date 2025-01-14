@@ -122,9 +122,7 @@ void CMD_set(int num_args, char **args) {
                 else
                     DT_ConsolePrintf("Err cannot interpret '%s' as a number\n", args[1]);
             }
-        }
-        else
-        {
+        } else {
             if (num_args > 2)
                 DT_ConsolePrintln("Err expected from 0 to 2 arguments");
             else
@@ -133,8 +131,7 @@ void CMD_set(int num_args, char **args) {
     }
 }
 
-void CMD_state(int num_args, char **args)
-{
+void CMD_state(int num_args, char **args) {
     float x, y, rot;
 
     // If there are zero arguments, print all states
