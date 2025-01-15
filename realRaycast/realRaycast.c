@@ -534,9 +534,9 @@ void setup(void) {
 
     // Debug mobjs
     #define new_mobj(x, y, name) mobj_create(x * GRID_SPACING, y * GRID_SPACING, name)
-    new_mobj(12, 2.5, "mj1");
-    new_mobj(12, 3,   "mj2");
-    new_mobj(12, 3.5, "mj3");
+    new_mobj(12, 2.5, "person");
+    new_mobj(12, 3,   "person");
+    new_mobj(12, 3.5, "person");
 }
 
 Uint8 prev_state[SDL_NUM_SCANCODES];
@@ -1108,7 +1108,7 @@ void free_memory(void) {
 int main() {
     printf("Start\n");
 
-    game_is_running = initialize_window("Sick Raycasting");
+    game_is_running = initialize_window("Raycasting");
 
     setup();
     debugging_start();
