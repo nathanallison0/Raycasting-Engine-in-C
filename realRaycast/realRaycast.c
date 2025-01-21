@@ -100,6 +100,7 @@ rgb grid_player_fill = {255, 50, 50};
 int grid_follow_player = TRUE;
 int show_player_vision = FALSE;
 int show_player_trail = FALSE;
+//#define PLAYER_VISION_LINES
 
 // Grid mobjs
 int grid_mobj_radius = 7;
@@ -115,6 +116,7 @@ float fp_scale = 0.02f;
 int fp_render_distance = 2000;
 int fp_render_distance_scr = (WINDOW_HEIGHT / 2) + 250;
 int fp_show_walls = TRUE;
+int pixel_circle_wrap;
 
 // User Input Variables
 int shift = FALSE;
@@ -288,6 +290,10 @@ xy raycast(float x, float y, float angle) {
     ) {
         c_hx += d_hx; c_hy += d_hy;
         c_epsilon_h += d_epsilon_h;
+        #ifdef PLAYER_VISION_LINES
+        if (show_player_vision)
+            temp_dgp(c_hx, c_hy, DGP_BLUE);
+        #endif
     }
 
     while (!(
@@ -301,6 +307,10 @@ xy raycast(float x, float y, float angle) {
     ) {
         c_vx += d_vx; c_vy += d_vy;
         c_epsilon_v += d_epsilon_v;
+        #ifdef PLAYER_VISION_LINES
+        if (show_player_vision)
+            temp_dgp(c_vx, c_vy, DGP_BLUE);
+        #endif
     }
 
     if (point_dist(c_hx, c_hy, x, y) < point_dist(c_vx, c_vy, x, y)) {
@@ -403,6 +413,10 @@ void setup(void) {
     // Calculate first person floor and ceiling gradient ending colors
     fp_bg_bottom_goal = get_gradient_color_dist(fp_bg_bottom, C_BLACK, fp_render_distance_scr, WINDOW_HEIGHT / 2);
     fp_bg_top_goal = get_gradient_color_dist(fp_bg_top, C_BLACK, fp_render_distance_scr, WINDOW_HEIGHT / 2);
+
+    // Calculate 360 degrees in screen pixels
+    pixel_circle_wrap = (WINDOW_WIDTH / fov) * (M_PI * 2);
+    //printf("pixel circle wrap: %d\n", pixel_circle_wrap);
 
     // Initialize grid
     grid_length = 25;
@@ -517,7 +531,7 @@ void setup(void) {
 
                     // Add name to list
                     // Allocate strlen - 3 because the .png should be cut off but leave room for terminating character
-                    size_t new_name_size = strlen(entry->d_name) - 3;
+                    int new_name_size = strlen(entry->d_name) - 3;
                     sprite_names[num_sprites - 1] = malloc(new_name_size);
                     strlcpy(sprite_names[num_sprites - 1], entry->d_name, new_name_size);
 
@@ -533,10 +547,20 @@ void setup(void) {
         printf("Could not open sprite directory\n");
 
     // Debug mobjs
-    #define new_mobj(x, y, name) mobj_create(x * GRID_SPACING, y * GRID_SPACING, name)
-    new_mobj(12, 2.5, "person");
-    new_mobj(12, 3,   "person");
-    new_mobj(12, 3.5, "person");
+    #define mobj(x, y, name) mobj_create(x * GRID_SPACING, y * GRID_SPACING, name)
+    
+    // Army of MJs
+    for (int x = 14; x < 24; x++) {
+        for (int y = 11; y < 21; y++) {
+            mobj(x, y, "mj1");
+        }
+    }
+
+    for (int x = 6; x < 15; x += 2) {
+        mobj(x, 1.1, "1");
+    }
+    
+    mobj(12, 3.9, "1");
 }
 
 Uint8 prev_state[SDL_NUM_SCANCODES];
@@ -797,68 +821,6 @@ void update(void) {
 
     //printf("player velocity: (%f, %f), angle: (%f deg)\n", player_x_velocity, player_y_velocity, rad_deg(player_angle));
 
-    /*
-    // North
-    if (
-        (
-            northeast_collision && (
-                !(southeast_collision && !northwest_collision) || (
-                    player_x_velocity != 0 &&
-                    (( ((int) prev_player_x + player_radius) / GRID_SPACING ) == ( ((int) player_x + player_radius) / GRID_SPACING ))
-                )
-            )
-        ) || (
-            northwest_collision && (
-                !(southwest_collision && !northeast_collision) || (
-                    player_x_velocity != 0 &&
-                    (( ((int) prev_player_x - player_radius) / GRID_SPACING ) == ( ((int) player_x - player_radius) / GRID_SPACING ))
-                )
-            )
-        )
-    ) {
-        player_y = (((int) player_y / GRID_SPACING) * GRID_SPACING) + player_radius;
-        player_y_velocity = 0;
-        
-        printf(
-            "north collision: east now_x (%d), east prev_x (%d)\n",
-            ((int) player_x + player_radius) / GRID_SPACING,
-            ((int) prev_player_x + player_radius) / GRID_SPACING
-        );
-        
-        // open_debug_menu = TRUE;
-    }
-
-    // South
-    if (
-        (southeast_collision && !(northeast_collision && !southwest_collision)) ||
-        (southwest_collision && !(northwest_collision && !southeast_collision))
-    ) {
-        player_y = ((((int) player_y / GRID_SPACING) + 1) * GRID_SPACING) - player_radius;
-        player_y_velocity = 0;
-        //puts("south collision");
-    }
-
-    // East
-    if (
-        (northeast_collision && !(northwest_collision && !southeast_collision)) ||
-        (southeast_collision && !(southwest_collision && !northeast_collision))
-    ) {
-        player_x = ((((int) player_x / GRID_SPACING) + 1) * GRID_SPACING) - player_radius;
-        player_x_velocity = 0;
-        //puts("east collision");
-    }
-
-    // West
-    if (
-        (northwest_collision && !(northeast_collision && !southwest_collision)) ||
-        (southwest_collision && !(southeast_collision && !northwest_collision))
-    ) {
-        player_x = (((int) player_x / GRID_SPACING) * GRID_SPACING) + player_radius;
-        player_x_velocity = 0;
-        //puts("west collision");
-    }
-    */
-
     prev_player_x = player_x;
     prev_player_y = player_y;
 
@@ -911,36 +873,37 @@ void render(void) {
 
             // Raycast
             xy hit = raycast(player_x, player_y, ray_angle);
+            temp_dgp(round(hit.x), round(hit.y), DGP_WHITE);
 
             if (view_mode == VIEW_FPS && fp_show_walls) {
                 ray_distances[ray_i] = cos(ray_angle - player_angle) * sqrtf( powf(hit.x - player_x, 2) + powf(hit.y - player_y, 2) );
             }
         }
 
-        // Draw walls
-        for (int i = 0; i < WINDOW_WIDTH; i++) {
-            int height = project(ray_distances[i]);
-            draw_rect_rgb(i, (WINDOW_HEIGHT / 2) - (height / 2), 1, height, shade_rgb(wall_color, ray_distances[i]));
-        }
+        if (view_mode == VIEW_FPS) {
+            // Draw walls
+            for (int i = 0; i < WINDOW_WIDTH; i++) {
+                int height = project(ray_distances[i]);
+                draw_rect_rgb(i, (WINDOW_HEIGHT / 2) - (height / 2), 1, height, shade_rgb(wall_color, ray_distances[i]));
+            }
 
-        // Store positions and distances of sprites on screen
-        for (mobj* o = mobj_head; o; o = o->next) {
-            // Get angle relative to left edge of player vision
-            float angle = atan2f(o->y - player_y, o->x - player_x);
-            if (angle < 0) angle += (M_PI * 2);
-            
-            float relative_angle = angle - (player_angle - (fov / 2));
-            if (relative_angle > M_PI * 2) relative_angle -= M_PI * 2;
-            else if (relative_angle < 0) relative_angle += M_PI * 2;
+            // Store positions and distances of sprites on screen
+            for (mobj* o = mobj_head; o; o = o->next) {
+                // Get angle relative to left edge of player vision
+                float angle = atan2f(o->y - player_y, o->x - player_x);
+                if (angle < 0) angle += (M_PI * 2);
+                
+                float relative_angle = angle - (player_angle - (fov / 2));
+                if (relative_angle > M_PI * 2) relative_angle -= M_PI * 2;
+                else if (relative_angle < 0) relative_angle += M_PI * 2;
 
-            // Calculare screen x pos
-            int screen_x = ((float) WINDOW_WIDTH / fov) * relative_angle;
+                // Calculare screen x pos
+                int screen_x = ((float) WINDOW_WIDTH / fov) * relative_angle;
 
-            // Calculate distance to mobj
-            float mobj_distance = point_dist(player_x, player_y, o->x, o->y);
+                // Calculate distance to mobj
+                float mobj_distance = point_dist(player_x, player_y, o->x, o->y);
 
-            // Store, sorted farthest to closest, for rendering if not behind wall
-            if (screen_x >= 0 && screen_x < WINDOW_WIDTH && ray_distances[screen_x] > mobj_distance) {
+                // Store, sorted farthest to closest, for rendering if not behind wall
                 sprite_proj* new_proj = sprite_proj_create(screen_x, mobj_distance, o->sprite_num);
                 
                 if (sprite_proj_head) {
@@ -961,36 +924,49 @@ void render(void) {
                     sprite_proj_head = new_proj;
                 }
             }
-        }
 
-        // Render mobjs
-        for (sprite_proj* sprite = sprite_proj_head; sprite; sprite = sprite->next) {
-            int sprite_height = project(sprite->dist);
+            // Render mobjs
+            for (sprite_proj* sprite = sprite_proj_head; sprite; sprite = sprite->next) {
+                int sprite_height = project(sprite->dist);
 
-            // Scale sprite width using height
-            int image_width, image_height;
-            SDL_QueryTexture(sprites[sprite->sprite_num], NULL, NULL, &image_width, &image_height);
-            int sprite_width = ((float) sprite_height / image_height) * image_width;
+                // Scale sprite width using height
+                int image_width, image_height;
+                SDL_QueryTexture(sprites[sprite->sprite_num], NULL, NULL, &image_width, &image_height);
+                int sprite_width = ((float) sprite_height / image_height) * image_width;
 
-            unsigned char sprite_shading = shade(255, sprite->dist);
-            SDL_SetTextureColorMod(sprites[sprite->sprite_num], sprite_shading, sprite_shading, sprite_shading);
+                if (sprite->x > WINDOW_WIDTH + (sprite_width / 2) && sprite->x < pixel_circle_wrap - (sprite_width / 2))
+                    continue;
 
-            // Draw columns to scale the sprite by distance
-            float texture_col = 0;
-            float texture_incr = (float) image_width / sprite_width;
-            SDL_Rect source = {0, 0, ceilf(texture_incr), image_height};
-            SDL_Rect dest = {sprite->x - (sprite_width / 2), (WINDOW_HEIGHT / 2) - (sprite_height / 2), 1, sprite_height};
-            for (int sprite_col_i = 0; sprite_col_i < sprite_width; sprite_col_i++) {
-                dest.x++;
-                if (ray_distances[dest.x] > sprite->dist) {
-                    source.x = texture_col;
-                    SDL_RenderCopy(renderer, sprites[sprite->sprite_num], &source, &dest);
+                unsigned char sprite_shading = shade(255, sprite->dist);
+                SDL_SetTextureColorMod(sprites[sprite->sprite_num], sprite_shading, sprite_shading, sprite_shading);
+
+                // Get start and end of drawing and how much was skipped
+                int start_x = sprite->x - (sprite_width / 2);
+                if (start_x > pixel_circle_wrap - sprite_width)
+                    start_x -= pixel_circle_wrap;
+                
+                int end_x = start_x + sprite_width;
+                int skipped = start_x;
+                start_x = max(start_x, 0);
+                skipped = start_x - skipped;
+                
+                // Draw columns to scale the sprite by distance
+                SDL_Rect dest = {start_x, (WINDOW_HEIGHT / 2) - (sprite_height / 2), 1, sprite_height};
+                float texture_incr = (float) image_width / sprite_width;
+                float texture_col = skipped * texture_incr;
+                SDL_Rect source = {0, 0, ceilf(texture_incr), image_height};
+                while (dest.x < end_x && dest.x < WINDOW_WIDTH) {
+                    if (ray_distances[dest.x] > sprite->dist) {
+                        source.x = texture_col;
+                        SDL_RenderCopy(renderer, sprites[sprite->sprite_num], &source, &dest);
+                    }
+                    dest.x++;
+                    texture_col += texture_incr;
                 }
-                texture_col += texture_incr;
             }
-        }
 
-        sprite_proj_destroy_all();
+            sprite_proj_destroy_all();
+        }
     }
 
     // Map view
@@ -1108,7 +1084,7 @@ void free_memory(void) {
 int main() {
     printf("Start\n");
 
-    game_is_running = initialize_window("Raycasting");
+    game_is_running = initialize_window("Michael Is Watching");
 
     setup();
     debugging_start();

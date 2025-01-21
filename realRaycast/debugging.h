@@ -28,6 +28,7 @@ void add_fill_dgp(int x, int y, byte color_index, size_t *num_dgps, size_t max_d
 #define fill_dgp(x, y, color_index) add_fill_dgp(x, y, color_index, &num_fill_dgps, max_fill_dgps, &fill_dgp_head, &fill_dgp_tail)
 void underscore_space(char *str);
 int str_num(char *str, float *dest);
+#define debug_print(var, format) printf(#var ": " format "\n", var)
 
 // Varlabels
 typedef struct {
@@ -450,7 +451,7 @@ void debugging_start(void) {
         //{"grid camera zoom",        &grid_cam_zoom},
         {"grid show crosshairs", &show_grid_crosshairs},
         {"grid cam follows player", &grid_follow_player},
-        {"grid show player vision", &show_player_vision},
+        {"show player vision", &show_player_vision},
         {"show player trail", &show_player_trail},
         {"grid show grid", &show_grid_lines},
         {"render walls", &fp_show_walls}
