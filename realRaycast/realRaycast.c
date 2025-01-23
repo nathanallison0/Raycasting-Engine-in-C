@@ -100,7 +100,7 @@ rgb grid_player_fill = {255, 50, 50};
 int grid_follow_player = TRUE;
 int show_player_vision = FALSE;
 int show_player_trail = FALSE;
-//#define PLAYER_VISION_LINES
+#define PLAYER_VISION_LINES
 
 // Grid mobjs
 int grid_mobj_radius = 7;
@@ -848,8 +848,8 @@ void update(void) {
 
 void render(void) {
     // Set background
-    if (view_mode == VIEW_FPS) set_draw_color_rgb(C_BLACK);
-    else if (view_mode == VIEW_GRID) set_draw_color_rgb(grid_bg);
+    if      (view_mode == VIEW_FPS)      set_draw_color_rgb(C_BLACK);
+    else if (view_mode == VIEW_GRID)     set_draw_color_rgb(grid_bg);
     else if (view_mode == VIEW_TERMINAL) set_draw_color_rgb(terminal_bg);
     SDL_RenderClear(renderer);
 
@@ -858,7 +858,6 @@ void render(void) {
         vertical_gradient(0, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT / 2, fp_bg_bottom_goal, fp_bg_bottom);
         // Ceiling
         vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT / 2, fp_bg_top, fp_bg_top_goal);
-        
     }
 
     if ((view_mode == VIEW_FPS && fp_show_walls) || show_player_vision) { // Raycasting
@@ -934,9 +933,11 @@ void render(void) {
                 SDL_QueryTexture(sprites[sprite->sprite_num], NULL, NULL, &image_width, &image_height);
                 int sprite_width = ((float) sprite_height / image_height) * image_width;
 
+                // End if sprite would draw completely off screenscreen
                 if (sprite->x > WINDOW_WIDTH + (sprite_width / 2) && sprite->x < pixel_circle_wrap - (sprite_width / 2))
                     continue;
 
+                // Shade sprite by distance
                 unsigned char sprite_shading = shade(255, sprite->dist);
                 SDL_SetTextureColorMod(sprites[sprite->sprite_num], sprite_shading, sprite_shading, sprite_shading);
 
@@ -955,13 +956,67 @@ void render(void) {
                 float texture_incr = (float) image_width / sprite_width;
                 float texture_col = skipped * texture_incr;
                 SDL_Rect source = {0, 0, ceilf(texture_incr), image_height};
+
+                float prev_wall_dist, this_wall_dist;
+
+                int last_wall_ingress_x = start_x;
                 while (dest.x < end_x && dest.x < WINDOW_WIDTH) {
+                    if (dest.x != start_x) {
+                        prev_wall_dist = sprite->dist - ray_distances[dest.x - 1];
+                        this_wall_dist = sprite->dist - ray_distances[dest.x];
+                    }
+
+                    // If not behind wall, draw column
                     if (ray_distances[dest.x] > sprite->dist) {
+                        // If just exited wall, go back and draw over section skipped by wall
+                        if (dest.x != start_x && 0 < prev_wall_dist && prev_wall_dist < GRID_SPACING && -GRID_SPACING < this_wall_dist && this_wall_dist < 0) {
+                            int point_of_callback = dest.x;
+                            dest.x = last_wall_ingress_x;
+                            texture_col = (dest.x - (start_x - skipped)) * texture_incr;
+                            while (dest.x < point_of_callback) {
+                                source.x = texture_col;
+                                SDL_RenderCopy(renderer, sprites[sprite->sprite_num], &source, &dest);
+
+                                dest.x++;
+                                texture_col += texture_incr;
+                            }
+                        }
                         source.x = texture_col;
                         SDL_RenderCopy(renderer, sprites[sprite->sprite_num], &source, &dest);
+
+                    // If this is the start of a wall no-draw section after a draw section, remember the x
+                    } else {
+                        if (dest.x != start_x && -GRID_SPACING < prev_wall_dist && prev_wall_dist < 0 && 0 < this_wall_dist && this_wall_dist < GRID_SPACING) {
+                            last_wall_ingress_x = dest.x;
+                        }
                     }
                     dest.x++;
                     texture_col += texture_incr;
+                }
+
+                // If drawing was ended with an unresolved wall ingress, fill it in
+                if (this_wall_dist > 0 && last_wall_ingress_x != start_x) {
+                    int point_of_callback = dest.x;
+                    dest.x = last_wall_ingress_x;
+                    texture_col = (dest.x - (start_x - skipped)) * texture_incr;
+                    while (dest.x < point_of_callback) {
+                        source.x = texture_col;
+                        SDL_RenderCopy(renderer, sprites[sprite->sprite_num], &source, &dest);
+
+                        dest.x++;
+                        texture_col += texture_incr;
+                    }
+                }
+
+                char* text;
+                asprintf(&text, "%f\n", sprite->dist);
+                BF_DrawTextRgb(text, sprite->x, WINDOW_HEIGHT / 2, 4, -1, C_WHITE, FALSE);
+                free(text);
+
+                if (0 <= sprite->x && sprite->x < WINDOW_WIDTH) {
+                    asprintf(&text, "%f", ray_distances[sprite->x]);
+                    BF_FillTextRgb(text, 4, -1, C_WHITE, FALSE);
+                    free(text);
                 }
             }
 

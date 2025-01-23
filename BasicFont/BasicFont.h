@@ -368,9 +368,7 @@ size_t BF_char_y = 0;
 
 size_t BF_char_line_x = 0;
 
-#define BF_SetTextPos(x, y) BF_char_line_x = x; BF_char_x = x; BF_char_y = y;
-
-#define BF_FillTextRgb(text, font_size, wrap_length, font_color, draw_cursor) BF_FillText(text, font_size, wrap_length, font_color.r, font_color.g, font_color.b, draw_cursor)
+void BF_SetTextPos(int x, int y) { BF_char_line_x = x; BF_char_x = x; BF_char_y = y; }
 
 void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_color_r, unsigned char font_color_g, unsigned char font_color_b, int draw_cursor) {
     size_t length = strlen(text);
@@ -410,7 +408,7 @@ void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_
         BF_char_x += font_size * (BF_CHAR_WIDTH + 1);
 
         // If the next character will exceed the wrap length, go to next line
-        if ((BF_char_x - BF_char_line_x) + (font_size * 5) >= wrap_length) {
+        if (wrap_length != -1 && (BF_char_x - BF_char_line_x) + (font_size * 5) >= wrap_length) {
             BF_char_x = BF_char_line_x;
             BF_char_y += font_size * (BF_CHAR_HEIGHT + 1);
         }
@@ -422,11 +420,17 @@ void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_
     }
 }
 
-#define BF_DrawTextRgb(text, x, y, font_size, wrap_length, color, show_cursor) BF_DrawText(text, x, y, font_size, wrap_length, color.r, color.g, color.b, show_cursor)
+void BF_FillTextRgb(char* text, int font_size, int wrap_length, rgb font_color, int draw_cursor) {
+    BF_FillText(text, font_size, wrap_length, font_color.r, font_color.g, font_color.b, draw_cursor);
+}
 
 void BF_DrawText(char* text, int x, int y, int font_size, int wrap_length, unsigned char color_r, unsigned char color_g, unsigned char color_b, int show_cursor) {
     BF_SetTextPos(x, y);
     BF_FillText(text, font_size, wrap_length, color_r, color_g, color_b, show_cursor);
+}
+
+void BF_DrawTextRgb(char* text, int x, int y, int font_size, int wrap_length, rgb color, int show_cursor) {
+    BF_DrawText(text, x, y, font_size, wrap_length, color.r, color.g, color.b, show_cursor);
 }
 
 typedef struct {
