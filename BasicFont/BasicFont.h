@@ -1,8 +1,8 @@
 #include <string.h>
 #include <stdlib.h>
-#include "../SDLStart.h"
+#include "../../SDL/SDLStart.h"
 
-#define BF_NUM_CHARS 45
+#define BF_NUM_CHARS 47
 #define BF_CHAR_WIDTH 5
 #define BF_CHAR_HEIGHT 5
 
@@ -321,23 +321,39 @@ const int BF_CHARS[BF_NUM_CHARS][BF_CHAR_HEIGHT][BF_CHAR_WIDTH] = {
         {0,0,0,1,0},
         {0,0,0,1,0},
         {0,1,1,1,0}
+    },
+    { // open parenthesis (() 
+        {0,0,1,1,1},
+        {0,1,0,0,0},
+        {0,1,0,0,0},
+        {0,1,0,0,0},
+        {0,0,1,1,1}
+    },
+    { // close parenthesis ())
+        {1,1,1,0,0},
+        {0,0,0,1,0},
+        {0,0,0,1,0},
+        {0,0,0,1,0},
+        {1,1,1,0,0}
     }
 };
 
-const char* BF_ALLCHARS = "abcdefghijklmnopqrstuvwxyz0123456789.?!>_:'[]";
+const char* BF_ALLCHARS = "abcdefghijklmnopqrstuvwxyz0123456789.?!>_:'[]()";
 
 typedef struct {
     char lower;
     char upper;
 } char_key;
 
-#define BF_NUM_CHAR_KEYS 5
+#define BF_NUM_CHAR_KEYS 7
 const char_key BF_CHAR_KEYS[BF_NUM_CHAR_KEYS] = {
     {'1', '!'},
     {'/', '?'},
     {'.', '>'},
     {'-', '_'},
-    {';', ':'}
+    {';', ':'},
+    {'9', '('},
+    {'0', ')'}
 };
 
 char BF_GetUpperCharKey(char lower_key) {
