@@ -117,16 +117,15 @@ int grid_mobj_radius = 7;
 
 // First person rendering
 rgb fp_bg_top = /*{255, 255, 230};*/ {137, 125, 116};
-rgb fp_bg_top_goal;
 rgb fp_bg_bottom;
-rgb fp_bg_bottom_goal;
 rgb wall_color = {150, 150, 150};
 int fp_brightness = 100;
-float fp_scale = 0.009417f;
+float fp_scale = 1 / 0.009417f;
 int fp_render_distance = 2000;
-int fp_render_distance_scr = (WINDOW_HEIGHT / 2) + 250;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
+float radians_per_pixel;
+#define FLOOR_RES 7
 
 // User Input Variables
 int shift = FALSE;
@@ -503,7 +502,7 @@ int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float poi
 }
 
 int project(float distance) {
-    return (1.0f / (distance * fp_scale)) * WINDOW_HEIGHT;
+    return WINDOW_HEIGHT / (distance / fp_scale);
 }
 
 unsigned char shade(unsigned char color, float distance) {
@@ -523,8 +522,8 @@ void calc_grid_cam_zoom_p(void) {
 }
 
 void calc_grid_cam_center(void) {
-    grid_cam_center_x = grid_cam_x + round( (WINDOW_WIDTH / 2) * (1.0f / grid_cam_zoom_p) );
-    grid_cam_center_y = grid_cam_y + round( (WINDOW_HEIGHT / 2) * (1.0f / grid_cam_zoom_p) );
+    grid_cam_center_x = grid_cam_x + round( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
+    grid_cam_center_y = grid_cam_y + round( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
 }
 
 // Resets
@@ -559,8 +558,8 @@ void zoom_grid_cam_center(int zoom) {
     int old_grid_cam_center_x = grid_cam_center_x;
     int old_grid_cam_center_y = grid_cam_center_y;
     zoom_grid_cam(zoom);
-    grid_cam_x = old_grid_cam_center_x - round( (WINDOW_WIDTH / 2) * (1.0f / grid_cam_zoom_p) );
-    grid_cam_y = old_grid_cam_center_y - round( (WINDOW_HEIGHT / 2) * (1.0f / grid_cam_zoom_p) );
+    grid_cam_x = old_grid_cam_center_x - round( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
+    grid_cam_y = old_grid_cam_center_y - round( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
 }
 
 // Player control
@@ -676,13 +675,9 @@ void setup(void) {
     // Set fps floor gradient start color based on floor color of grid
     fp_bg_bottom = grid_fill_nonsolid;
 
-    // Calculate first person floor and ceiling gradient ending colors
-    fp_bg_bottom_goal = get_gradient_color_dist(fp_bg_bottom, C_BLACK, fp_render_distance_scr, WINDOW_HEIGHT / 2);
-    fp_bg_top_goal = get_gradient_color_dist(fp_bg_top, C_BLACK, fp_render_distance_scr, WINDOW_HEIGHT / 2);
-
     // Calculate 360 degrees in screen pixels
     pixel_fov_circumfrence = (WINDOW_WIDTH / fov) * (M_PI * 2);
-    //printf("pixel circle wrap: %d\n", pixel_fov_circumfrence);
+    radians_per_pixel = fov / WINDOW_WIDTH;
 
     grid_enc = (bool_cont *) malloc(ceil( (float) ((GRID_LENGTH * GRID_HEIGHT) / SIZE_BOOL_CONT) ));
 
@@ -876,13 +871,13 @@ void process_input(void) {
             mouse_x = event.motion.x;
             mouse_y = event.motion.y;
             if (show_mouse_coords) {
-                grid_mouse_x = grid_cam_x + ((1.0f / grid_cam_zoom_p) * event.motion.x);
-                grid_mouse_y = grid_cam_y + ((1.0f / grid_cam_zoom_p) * event.motion.y);
+                grid_mouse_x = grid_cam_x + (event.motion.x / grid_cam_zoom_p);
+                grid_mouse_y = grid_cam_y + (event.motion.y / grid_cam_zoom_p);
             }
 
             if (prev_mouse_x != -1 && prev_mouse_y != -1 && left_mouse_down) {
-                grid_cam_x -= roundf( (mouse_x - prev_mouse_x) * (1.0f / grid_cam_zoom_p) );
-                grid_cam_y -= roundf( (mouse_y - prev_mouse_y) * (1.0f / grid_cam_zoom_p) );
+                grid_cam_x -= roundf( (mouse_x - prev_mouse_x) / grid_cam_zoom_p );
+                grid_cam_y -= roundf( (mouse_y - prev_mouse_y) / grid_cam_zoom_p );
             }
             prev_mouse_x = mouse_x;
             prev_mouse_y = mouse_y;
@@ -906,7 +901,6 @@ void process_input(void) {
             reset_grid_cam();
             reset_player();
         }
-        if (key_just_pressed(SDL_SCANCODE_P)) print_debug();
 
         if (state[SDL_SCANCODE_W]) vertical_input++;
         if (state[SDL_SCANCODE_S]) vertical_input--;
@@ -1126,8 +1120,8 @@ void update(void) {
     if (show_player_trail) fill_dgp(player_x, player_y, DG_YELLOW);
 
     if (grid_follow_player) {
-        grid_cam_x = round( player_x - ((WINDOW_WIDTH / 2) * (1.0f / grid_cam_zoom_p)) );
-        grid_cam_y = round( player_y - ((WINDOW_HEIGHT / 2) * (1.0f / grid_cam_zoom_p)) );
+        grid_cam_x = round( player_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom_p) );
+        grid_cam_y = round( player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom_p) );
     }
 
     
@@ -1142,26 +1136,19 @@ void update(void) {
 
 void render(void) {
     // Set background
-    if      (view_mode == VIEW_FPS)      set_draw_color_rgb(C_BLACK);
+    if      (view_mode == VIEW_FPS)      set_draw_color_rgb(C_YELLOW);
     else if (view_mode == VIEW_GRID)     set_draw_color_rgb(grid_bg);
     else if (view_mode == VIEW_TERMINAL) set_draw_color_rgb(terminal_bg);
     SDL_RenderClear(renderer);
 
-    if (view_mode == VIEW_FPS) {
-        // Floor
-        vertical_gradient(0, WINDOW_HEIGHT / 2, WINDOW_WIDTH, WINDOW_HEIGHT / 2, fp_bg_bottom_goal, fp_bg_bottom);
-        // Ceiling
-        vertical_gradient(0, 0, WINDOW_WIDTH, WINDOW_HEIGHT / 2, fp_bg_top, fp_bg_top_goal);
-    }
-
     if ((view_mode == VIEW_FPS && fp_show_walls) || show_player_vision || grid_casting) { // Raycasting
-        float radians_per_pixel = fov / WINDOW_WIDTH;
         float ray_dists[WINDOW_WIDTH];
 
         // Raycast and draw walls
         for (int ray_i = 0; ray_i < WINDOW_WIDTH; ray_i++) {
             // Calculate ray angle
-            float ray_angle = (player_angle - (fov / 2)) + (radians_per_pixel * ray_i);
+            float relative_ray_angle = (radians_per_pixel * ray_i) - (fov / 2);
+            float ray_angle = player_angle + relative_ray_angle; 
             if (ray_angle < 0) ray_angle += M_PI * 2;
             else if (ray_angle >= M_PI * 2) ray_angle -= M_PI * 2;
 
@@ -1176,8 +1163,9 @@ void render(void) {
             char draw_reverse = (ray_angle < M_PI && horiz_hit) || (M_PI_2 < ray_angle && ray_angle < M_PI + M_PI_2 && !horiz_hit);
 
             if ((view_mode == VIEW_FPS && fp_show_walls) || grid_casting) {
-                // Draw wall
+                // Get hit distance
                 ray_dists[ray_i] = fp_dist(hit.x, hit.y, ray_angle);
+
                 if (view_mode == VIEW_FPS && fp_show_walls) {
                     int wall_height = project(ray_dists[ray_i]);
 
@@ -1193,6 +1181,25 @@ void render(void) {
                         row_y += texture_row_height;
                         end = roundf(row_y);
                         draw_rect_rgb(ray_i, start + 1, 1, end - start, shade_rgb(textures[texture_index][texture_y][texture_x], ray_dists[ray_i]));
+                    }
+
+                    // Draw floor and ceiling tile pixels below wall
+                    int end_floor = ceilf(((float) WINDOW_HEIGHT - wall_height) / 2);
+                    for (int pixel_y = 0; pixel_y < end_floor; pixel_y += FLOOR_RES) {
+                        // Player height reference
+                        float dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (pixel_y + (FLOOR_RES / 2)))) * fp_scale;
+                        float proj_dist_to_point = dist_to_point / cosf(relative_ray_angle);
+                        
+                        float point_x = (cosf(ray_angle) * proj_dist_to_point) + player_x;
+                        float point_y = (sinf(ray_angle) * proj_dist_to_point) + player_y;
+
+                        int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                        int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+
+                        int height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
+                        rgb shaded_color = shade_rgb(textures[2][texture_y][texture_x], proj_dist_to_point);
+                        draw_rect_rgb(ray_i, pixel_y, 1, height, shaded_color);
+                        draw_rect_rgb(ray_i, WINDOW_HEIGHT - pixel_y - height, 1, height, shaded_color);
                     }
                 }
             }
@@ -1244,7 +1251,7 @@ void render(void) {
                 else if (relative_angle < 0) relative_angle += M_PI * 2;
                 int screen_x = (WINDOW_WIDTH / fov) * relative_angle;
 
-                // End if sprite would draw completely off screenscreen
+                // End if sprite would draw completely off screen
                 if (screen_x > WINDOW_WIDTH + (sprite_width / 2) && screen_x < pixel_fov_circumfrence - (sprite_width / 2))
                     continue;
 
@@ -1282,7 +1289,6 @@ void render(void) {
                         if (view_mode == VIEW_FPS) {
                             SDL_RenderCopy(renderer, sprites[sprite->obj->sprite_num], &source, &dest);
                         }
-
                     }
                     dest.x++;
                     texture_col += texture_incr;

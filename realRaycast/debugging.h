@@ -26,7 +26,6 @@ typedef struct {
 } dgl;
 
 void add_temp_dgp(int x, int y, byte color_index, size_t *num_dgps, struct temp_dgp **list);
-void print_debug(void);
 void add_fill_dgp(int x, int y, byte color_index, int *num_dgps, int max_dgps, struct fill_dgp **head, struct fill_dgp **tail);
 void add_dgl(int x1, int y1, int x2, int y2, byte color_index);
 #define temp_dgp(x, y, color_index) add_temp_dgp(x, y, color_index, &num_temp_dgps, &temp_dgp_list)
@@ -304,10 +303,6 @@ struct temp_dgp *temp_dgp_list = NULL;
 
 dgl *dgl_list = NULL;
 size_t num_dgls = 0;
-
-void print_debug(void) {
-
-}
 
 void add_fill_dgp(int x, int y, byte color_index, int *num_dgps, int max_dgps, struct fill_dgp **head, struct fill_dgp **tail) {
     struct fill_dgp *p = malloc(sizeof(*p));
