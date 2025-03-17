@@ -282,13 +282,10 @@ void raycast_vars(float x, float y, float angle, float* vars) {
         alpha = angle;
         c_hy = ((ceil(y / GRID_SPACING)) * GRID_SPACING);// - 1;
         c_hx = ((c_hy - y) / tan(alpha)) + x;
-        
         d_hx = GRID_SPACING / tan(alpha);
         d_hy = GRID_SPACING;
-        
         c_vx = (floor(x / GRID_SPACING) * GRID_SPACING) + GRID_SPACING;
         c_vy = (tan(alpha) * (c_vx - x)) + y;
-        
         d_vx = GRID_SPACING;
         d_vy = tan(alpha) * (d_vx);
         

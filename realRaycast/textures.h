@@ -1,6 +1,6 @@
 #include "../../SDL/SDLStart.h"
 
-#define TEXTURE_WIDTH 5
+#define TEXTURE_WIDTH 90
 
 const rgb textures[][TEXTURE_WIDTH][TEXTURE_WIDTH] = {
     {
