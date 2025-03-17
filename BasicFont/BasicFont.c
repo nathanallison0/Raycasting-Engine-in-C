@@ -57,7 +57,7 @@ void setup(void) {
     }
 }
 
-Uint8 prev_state[SDL_NUM_SCANCODES];
+Uint8 prev_state[SDL_SCANCODE_COUNT];
 int key_just_pressed(int scancode) {
     return state[scancode] && !prev_state[scancode];
 }
@@ -69,11 +69,11 @@ void process_input(void) {
     int shift = state[SDL_SCANCODE_RSHIFT] || state[SDL_SCANCODE_LSHIFT];
 
     switch (event.type) {
-        case SDL_QUIT:
+        case SDL_EVENT_QUIT:
             game_is_running = FALSE;
             break;
-        case SDL_KEYDOWN: {
-            char c = event.key.keysym.sym;
+        case SDL_EVENT_KEY_DOWN: {
+            char c = event.key.key;
 
             if (key_just_pressed(SDL_SCANCODE_UP)) {
                 font_size++;

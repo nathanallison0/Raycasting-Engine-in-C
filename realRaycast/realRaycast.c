@@ -4,7 +4,7 @@
 #include <dirent.h>
 
 // Extra SDL functions
-#include "../../SDL/SDLStart.h"
+#include "../../SDL/SDL3Start.h"
 
 // Grid encoding
 #include "./grid.h"
@@ -661,7 +661,7 @@ const Uint8 vertical_textures[GRID_HEIGHT][GRID_LENGTH + 1] = {
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} // 25
 };
 
-const Uint8 *state;
+const bool *state;
 void setup(void) {
     // Intiailize bit representation
     bit_rep_init();
@@ -842,7 +842,7 @@ void setup(void) {
     mobj(7, 12.9, "3");
 }
 
-Uint8 prev_state[SDL_NUM_SCANCODES];
+Uint8 prev_state[SDL_SCANCODE_COUNT];
 int key_just_pressed(int scancode) {
     return state[scancode] && !prev_state[scancode];
 }
@@ -852,19 +852,19 @@ void process_input(void) {
     SDL_PollEvent(&event);
 
     switch (event.type) {
-        case SDL_QUIT:
+        case SDL_EVENT_QUIT:
             game_is_running = FALSE;
             break;
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = FALSE;
             break;
-        case SDL_MOUSEBUTTONDOWN:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
             if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = TRUE;
             break;
-        case SDL_MOUSEWHEEL:
+        case SDL_EVENT_MOUSE_WHEEL:
             zoom_grid_cam_center(-event.wheel.y);
             break;
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             mouse_x = event.motion.x;
             mouse_y = event.motion.y;
             if (show_mouse_coords) {
@@ -912,8 +912,8 @@ void process_input(void) {
         // if (state[SDL_SCANCODE_UP]) fp_scale *= 1.01f;
         // if (state[SDL_SCANCODE_DOWN]) fp_scale /= 1.01f;
 
-    } else if (view_mode == VIEW_TERMINAL && event.type == SDL_KEYDOWN) {
-        char key = event.key.keysym.sym;
+    } else if (view_mode == VIEW_TERMINAL && event.type == SDL_EVENT_KEY_DOWN) {
+        char key = event.key.key;
 
         // If the shift key is pressed, look for a shifted character corresponding
         // with the key pressed and use if found
@@ -1238,8 +1238,8 @@ void render(void) {
                 int sprite_height = project(sprite->dist);
 
                 // Scale sprite width using height
-                int image_width, image_height;
-                SDL_QueryTexture(sprites[sprite->obj->sprite_num], NULL, NULL, &image_width, &image_height);
+                float image_width, image_height;
+                SDL_GetTextureSize(sprites[sprite->obj->sprite_num], &image_width, &image_height);
                 int sprite_width = ((float) sprite_height / image_height) * image_width;
           
                 // Calculate screen x pos
@@ -1267,14 +1267,14 @@ void render(void) {
                 skipped = start_x - skipped;
                 
                 // Draw columns to scale the sprite by distance
-                SDL_Rect dest = {start_x, (WINDOW_HEIGHT / 2) - (sprite_height / 2), 1, sprite_height};
+                SDL_FRect dest = {start_x, (WINDOW_HEIGHT / 2) - (sprite_height / 2), 1, sprite_height};
                 float texture_incr = (float) image_width / sprite_width;
                 float texture_col = skipped * texture_incr;
-                SDL_Rect source = {0, 0, ceilf(texture_incr), image_height};
+                SDL_FRect source = {0, 0, ceilf(texture_incr), image_height};
 
                 while (dest.x < end_x && dest.x < WINDOW_WIDTH) {
                     // Only draw column if it is in front of its corresponding wall
-                    if (ray_dists[dest.x] > sprite->dist) {
+                    if (ray_dists[(int) dest.x] > sprite->dist) {
                         // float angle_to_point = ((dest.x * radians_per_pixel) - (fov / 2)) + player_angle;
                         // float rel_angle_to = angle_to_point - sprite->angle;
                         // float dist_from_center = sprite->dist * tanf(rel_angle_to);
@@ -1284,7 +1284,7 @@ void render(void) {
 
                         source.x = texture_col;
                         if (view_mode == VIEW_FPS) {
-                            SDL_RenderCopy(renderer, sprites[sprite->obj->sprite_num], &source, &dest);
+                            SDL_RenderTexture(renderer, sprites[sprite->obj->sprite_num], &source, &dest);
                         }
                     }
                     dest.x++;
