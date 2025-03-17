@@ -125,7 +125,7 @@ int fp_render_distance = 2000;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
 float radians_per_pixel;
-#define FLOOR_RES 7
+#define FLOOR_RES 10
 
 // User Input Variables
 int shift = FALSE;
