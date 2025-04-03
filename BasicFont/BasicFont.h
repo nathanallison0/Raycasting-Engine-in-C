@@ -386,7 +386,7 @@ size_t BF_char_line_x = 0;
 
 void BF_SetTextPos(int x, int y) { BF_char_line_x = x; BF_char_x = x; BF_char_y = y; }
 
-void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_color_r, unsigned char font_color_g, unsigned char font_color_b, int draw_cursor) {
+void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_color_r, unsigned char font_color_g, unsigned char font_color_b, char draw_cursor) {
     size_t length = strlen(text);
 
     // Iterate though each character in the text

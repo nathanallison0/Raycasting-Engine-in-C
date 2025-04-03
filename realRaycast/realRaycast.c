@@ -35,11 +35,9 @@ void g_draw_rect(int, int, int, int, unsigned char, unsigned char, unsigned char
 void g_draw_rect_rgb(int, int, int, int, rgb);
 void g_draw_point(int, int, float, unsigned char, unsigned char, unsigned char);
 void g_draw_point_rgb(int, int, float, rgb);
-void draw_rect_bordered(int, int, int, int, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char, unsigned char);
-void draw_rect_bordered_rgb(int, int, int, int, rgb, rgb);
 void rotate_player(float);
-void push_player_forward(int);
-void push_player_right(int);
+void push_player_forward(float);
+void push_player_right(float);
 void g_draw_scale_point(int, int, int, unsigned char, unsigned char, unsigned char);
 void g_draw_scale_point_rgb(int, int, int, rgb);
 
@@ -56,8 +54,13 @@ prev_view_mode;
 
 void set_view(enum VIEW_MODE mode) { prev_view_mode = view_mode; view_mode = mode; }
 
+typedef struct {
+    float x;
+    float y;
+} xy;
+
 // Grid
-#define GRID_LENGTH 25
+#define GRID_WIDTH 25
 #define GRID_HEIGHT 25
 bool_cont *grid_enc;
 // Grid visual
@@ -91,17 +94,22 @@ int player_radius = 10;
 float player_x_velocity;
 float player_y_velocity;
 float player_velocity_angle;
-int player_max_velocity = 350;
+int player_max_velocity = 200;
 float player_angle;
 float fov = M_PI / 3;
-int player_movement_accel = 20;
-int player_movement_decel = 20;
+int player_movement_accel = 600;
+int player_movement_decel = 600;
 float player_angle_increment = M_PI / 18;
-int player_rotation_speed = 10;
+int player_rotation_speed = 8;
+
+// Player interaction
+#define TRANSITION_LEN 0.5
+float transition_timer = -1;
+char transition_dir = 0;
 
 void assign_i_player_pos(void) {
-    i_player_x = round(player_x);
-    i_player_y = round(player_y);
+    i_player_x = roundf(player_x);
+    i_player_y = roundf(player_y);
 }
 // Player grid visual
 int grid_player_pointer_dist = 15;
@@ -116,12 +124,21 @@ char show_player_trail = FALSE;
 int grid_mobj_radius = 7;
 
 // First person rendering
-rgb fp_bg_top = /*{255, 255, 230};*/ {137, 125, 116};
-rgb fp_bg_bottom;
-rgb wall_color = {150, 150, 150};
-int fp_brightness = 100;
 float fp_scale = 1 / 0.009417f;
-int fp_render_distance = 2000;
+#define FP_RENDER_DISTANCE 500
+#define FP_BRIGHTNESS 0.75f
+#define HAS_FLASH FALSE
+
+#if HAS_FLASH
+#define FLASH_DISTANCE 2000
+#define FLASH_BRIGHTNESS 1.0f
+#define FLASH_WIDTH (WINDOW_WIDTH / 6)
+#define FLASH_RAD_SQUARED ((FLASH_WIDTH / 2) * (FLASH_WIDTH / 2))
+float flash_heights[FLASH_WIDTH / 2];
+#endif
+
+float fp_brightness_appl;
+int fp_floor_render_height;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
 float radians_per_pixel;
@@ -143,21 +160,38 @@ int sprite_not_found_num = -1;
 int num_sprites = 0;
 char **sprite_names = NULL;
 
-rgb mobj_color = C_BLUE;
+#define __get_sprite_num__() \
+item->sprite_num = sprite_not_found_num; \
+for (int i = 0; i < num_sprites; i++) { \
+    if (sprite_names[i] && strcmp(sprite_name, sprite_names[i]) == 0) { \
+        item->sprite_num = i; \
+        break; \
+    } \
+} \
+//if (item->sprite_num == sprite_not_found_num) printf("Couldn't find sprite %s\n", sprite_name);
+
+rgb grid_mobj_color = C_BLUE;
 int num_mobjs = 0;
 __linked_list_all_add__(
-    mobj, float x; float y; int sprite_num,
+    mobj,
+    float x; float y; int sprite_num,
     (float x, float y, char *sprite_name),
         item->x = x;
         item->y = y;
-        item->sprite_num = sprite_not_found_num;
-        for (int i = 0; i < num_sprites; i++) {
-            if (strcmp(sprite_name, sprite_names[i]) == 0) {
-                item->sprite_num = i;
-                break;
-            }
-        }
+        __get_sprite_num__()
         num_mobjs++
+)
+
+#define NUM_ROT_SPRITE_FRAMES 8
+int num_rot_mobjs = 0;
+float rot_sprite_incr;
+__linked_list_all_add__(
+    rot_mobj, float x; float y; float angle; int sprite_num,
+    (float x, float y, float angle, char *sprite_name),
+        item->x = x;
+        item->y = y;
+        __get_sprite_num__()
+        num_rot_mobjs++
 )
 
 #define SPRITE_PATH "./sprites/"
@@ -165,11 +199,11 @@ SDL_Texture **sprites = NULL;
 #define SPRITE_NOT_FOUND_NAME "sprite_not_found"
 
 __linked_list_all__(
-    sprite_proj, float dist; float angle; mobj *obj,
-    (float dist, float angle, mobj* obj),
+    sprite_proj, float dist; float angle; int sprite_num,
+    (float dist, float angle, int sprite_num),
         item->dist = dist;
         item->angle = angle;
-        item->obj = obj
+        item->sprite_num = sprite_num
 )
 
 // Debugging
@@ -229,8 +263,8 @@ void g_draw_line_rgb(int x1, int y1, int x2, int y2, rgb color) {
 // Grid 
 int get_grid_bool(int x, int y) {
     return bit_bool(
-        grid_enc[((GRID_LENGTH * y) + x) / (SIZE_BOOL_CONT * 8)],
-        ((GRID_LENGTH * y) + x) % (SIZE_BOOL_CONT * 8)
+        grid_enc[((GRID_WIDTH * y) + x) / (SIZE_BOOL_CONT * 8)],
+        ((GRID_WIDTH * y) + x) % (SIZE_BOOL_CONT * 8)
     );
 }
 
@@ -239,11 +273,6 @@ int get_grid_bool_coords(int x, int y) {
 }
 
 // Raycasting
-typedef struct {
-    float x;
-    float y;
-} xy;
-
 float point_dist(float x1, float y1, float x2, float y2) {
     return sqrtf(powf(x1 - x2, 2) + powf(y1 - y2, 2));
 }
@@ -334,7 +363,7 @@ xy raycast(float x, float y, float angle, char *horiz_hit) {
 
     while (!(
         !(
-            ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_LENGTH ) &&
+            ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
             ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
             
         ) || (
@@ -352,7 +381,7 @@ xy raycast(float x, float y, float angle, char *horiz_hit) {
 
     while (!(
         !(
-            ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_LENGTH ) &&
+            ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
             ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
         ) || (
             ( get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) ||
@@ -398,7 +427,7 @@ int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float poi
     ) {
         if (!(
             (
-                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_LENGTH ) &&
+                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
                 ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
             ) && (
                 (hit_y < point_y && c_hy < stop_h) || 
@@ -417,7 +446,7 @@ int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float poi
         c_epsilon_h += d_epsilon_h;
         if (!(
             (
-                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_LENGTH ) &&
+                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
                 ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
             ) && (
                 (hit_y < point_y && c_hy < stop_h) || 
@@ -452,7 +481,7 @@ int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float poi
     ) {
         if (!(
             (
-                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_LENGTH ) &&
+                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
                 ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
             ) && (
                 (hit_x < point_x && c_vx < stop_v) ||
@@ -471,7 +500,7 @@ int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float poi
         c_epsilon_v += d_epsilon_v;
         if (!(
             (
-                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_LENGTH ) &&
+                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
                 ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
             ) && (
                 (hit_x < point_x && c_vx < stop_v) ||
@@ -502,12 +531,92 @@ int project(float distance) {
     return WINDOW_HEIGHT / (distance / fp_scale);
 }
 
-unsigned char shade(unsigned char color, float distance) {
-    return color - ((distance / fp_render_distance) * fp_brightness);
+unsigned char shade(unsigned char color, float distance, float render_distance, float bright) {
+    return (color - (((float) color / render_distance) * distance)) * bright * fp_brightness_appl;
 }
 
-rgb shade_rgb(rgb color, float distance) {
-    return brighten(color, -(distance / fp_render_distance) * fp_brightness);
+rgb shade_rgb(rgb color, float distance, float render_distance, float bright) {
+    return (rgb) {
+        shade(color.r, distance, render_distance, bright),
+        shade(color.g, distance, render_distance, bright),
+        shade(color.b, distance, render_distance, bright)
+    };
+}
+
+#define shade_reg(color, distance) shade_rgb(color, distance, FP_RENDER_DISTANCE, FP_BRIGHTNESS)
+#define shade_flash(color, distance) shade_rgb(color, distance, FLASH_DISTANCE, FLASH_BRIGHTNESS)
+
+void draw_floor_texture_bit(float ray_angle, float rel_ray_angle, int x, int y, int height
+    #if HAS_FLASH
+    , char is_flash
+    #endif
+) {
+    // Get real and project distance to point
+    // Player height reference
+    float dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (y + ((float) height / 2)))) * fp_scale;
+    float proj_dist_to_point = dist_to_point / cosf(rel_ray_angle);
+    
+    // Get coordinates of texture point in world space
+    float point_x = (cosf(ray_angle) * proj_dist_to_point) + player_x;
+    float point_y = (sinf(ray_angle) * proj_dist_to_point) + player_y;
+
+    // Find texture coordinates
+    int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+    int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+
+    // Shade color
+    #if HAS_FLASH
+    rgb shaded_color;
+    if (is_flash) {
+        shaded_color = shade_flash(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
+    } else {
+        shaded_color = shade_reg(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
+    }
+    #else
+    rgb shaded_color = shade_reg(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
+    #endif
+
+
+    // Draw on floor and ceiling
+    draw_rect_rgb(x, y, 1, height, shaded_color);
+    draw_rect_rgb(x, WINDOW_HEIGHT - y - height, 1, height, shaded_color);
+}
+
+float get_mobj_angle(float x, float y) {
+    float angle = atan2f(y - player_y, x - player_x);
+    if (angle < 0) angle += (M_PI * 2);
+    return angle;
+}
+
+void add_sprite_proj(float x, float y, float angle, int sprite_num) {
+    float distance = fp_dist(x, y, angle);
+
+    #if !HAS_FLASH
+    if (distance > FP_RENDER_DISTANCE) {
+        return;
+    }
+    #endif
+
+    // Store, sorted farthest to closest, for rendering
+    sprite_proj *new_proj = sprite_proj_create(distance, angle, sprite_num);
+    
+    if (sprite_proj_head) {
+        if (sprite_proj_head->dist < distance) {
+            new_proj->next = sprite_proj_head;
+            sprite_proj_head = new_proj;
+        } else {
+            // Find closest greater sprite
+            sprite_proj *greater = sprite_proj_head;
+            for (;greater->next && greater->next->dist > distance; greater = greater->next);
+
+            // Insert this sprite after the lesser sprite
+            sprite_proj *lesser = greater->next;
+            greater->next = new_proj;
+            new_proj->next = lesser;
+        }
+    } else {
+        sprite_proj_head = new_proj;
+    }
 }
 
 float perc(int percent) {
@@ -519,8 +628,8 @@ void calc_grid_cam_zoom_p(void) {
 }
 
 void calc_grid_cam_center(void) {
-    grid_cam_center_x = grid_cam_x + round( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
-    grid_cam_center_y = grid_cam_y + round( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
+    grid_cam_center_x = grid_cam_x + roundf( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
+    grid_cam_center_y = grid_cam_y + roundf( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
 }
 
 // Resets
@@ -566,47 +675,60 @@ void rotate_player(float angle) {
     while (player_angle >= M_PI * 2) player_angle -= (M_PI * 2);
 }
 
-void push_player_forward(int force) {
-    player_x_velocity += cos(player_angle) * force;
-    player_y_velocity += sin(player_angle) * force;
+void push_player_forward(float force) {
+    if (force != 0) {
+        player_x_velocity += cos(player_angle) * force;
+        player_y_velocity += sin(player_angle) * force;
+    }
 }
 
-void push_player_right(int force) {
-    player_angle += M_PI_2;
-    push_player_forward(force);
-    player_angle -= M_PI_2;
+void push_player_right(float force) {
+    if (force != 0) {
+        player_angle += M_PI_2;
+        push_player_forward(force);
+        player_angle -= M_PI_2;
+    }
 }
-/*
+
+void load_sprite(char *relative_path, char *name) {
+    // Get full path to sprite
+    char *full_path;
+    asprintf(&full_path, SPRITE_PATH "%s", relative_path);
+
+    // Load texture
+    SDL_Texture *sprite = IMG_LoadTexture(renderer, full_path);
+    free(full_path);
+
+    if (sprite) {
+        // Allocate space for texture and name
+        sprites = realloc(sprites, ++num_sprites * sizeof(SDL_Texture *));
+        sprite_names = realloc(sprite_names, num_sprites * sizeof(char *));
+
+        // Add texture to list
+        sprites[num_sprites - 1] = sprite;
+
+        // Add name to list
+        if (name) {
+            int new_name_size = strlen(name) + 1;
+            sprite_names[num_sprites - 1] = malloc(new_name_size);
+            strlcpy(sprite_names[num_sprites - 1], name, new_name_size);
+
+            // Set sprite not found index if not already set
+            if (sprite_not_found_num == -1 && strcmp(sprite_names[num_sprites - 1], SPRITE_NOT_FOUND_NAME) == 0) {
+                sprite_not_found_num = num_sprites - 1;
+            }
+        } else {
+            sprite_names[num_sprites - 1] = NULL;
+        }
+    } else {
+        printf("Could not load sprite %s%s\n", relative_path, name);
+    }
+}
+
+Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_WIDTH] = {
 //   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
-    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 3
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1}, // 4
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 5
-    {1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 6
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 7
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 8
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 9
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1}, // 10
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 11
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 12
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 13
-    {1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 14
-    {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 15
-    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 16
-    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 17
-    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 18
-    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 19
-    {1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 20
-    {1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 21
-    {1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1}, // 22
-    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 23
-    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 24
-    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}  // 25
-*/
-const Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_LENGTH] = {
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0}, // 2
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
@@ -633,12 +755,13 @@ const Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_LENGTH] = {
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}  // 26
 };
 
-const Uint8 vertical_textures[GRID_HEIGHT][GRID_LENGTH + 1] = {
+Uint8 vertical_textures[GRID_HEIGHT][GRID_WIDTH + 1] = {
+//   1 2 3 4 5 6 7 8 9 1011121314151617181920212223242526
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
-    {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
-    {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
-    {0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
@@ -661,24 +784,36 @@ const Uint8 vertical_textures[GRID_HEIGHT][GRID_LENGTH + 1] = {
     {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} // 25
 };
 
+Uint8 *get_texture_index(float x, float y, char horiz_hit) {
+    if (horiz_hit) {
+        return &horiz_textures[(int) y / GRID_SPACING][(int) x / GRID_SPACING];
+    } else {
+        return &vertical_textures[(int) y / GRID_SPACING][(int) x / GRID_SPACING];
+    }
+}
+
 const bool *state;
 void setup(void) {
-    // Intiailize bit representation
-    bit_rep_init();
-
     // Initialize keyboard state
     state = SDL_GetKeyboardState(NULL);
 
-    // Set fps floor gradient start color based on floor color of grid
-    fp_bg_bottom = grid_fill_nonsolid;
-
-    // Calculate 360 degrees in screen pixels
     pixel_fov_circumfrence = (WINDOW_WIDTH / fov) * (M_PI * 2);
     radians_per_pixel = fov / WINDOW_WIDTH;
+    fp_floor_render_height = ceilf((WINDOW_HEIGHT - project(FP_RENDER_DISTANCE)) / 2.0f);
+    rot_sprite_incr = ((M_PI * 2) / NUM_ROT_SPRITE_FRAMES);
 
-    grid_enc = (bool_cont *) malloc(ceil( (float) ((GRID_LENGTH * GRID_HEIGHT) / SIZE_BOOL_CONT) ));
+    // Calculate flashlight heights
+    #if HAS_FLASh
+    for (int i = 0; i < FLASH_WIDTH / 2; i++) {
+        flash_heights[i] = sqrtf(FLASH_RAD_SQUARED - powf(i - (FLASH_WIDTH / 2), 2));
+    }
+    #endif
 
-    int new_grid[GRID_HEIGHT][GRID_LENGTH] = {
+    fp_brightness_appl = FP_BRIGHTNESS;
+
+    grid_enc = (bool_cont *) malloc(ceil( (float) ((GRID_WIDTH * GRID_HEIGHT) / SIZE_BOOL_CONT) ));
+
+    int new_grid[GRID_HEIGHT][GRID_WIDTH] = {
         /*
         {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
         {1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1},
@@ -742,7 +877,33 @@ void setup(void) {
         {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 23
         {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 24
         {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}  // 25
-       
+        
+        /*
+        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
+        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
+        */
         /*
         {0,0,0,0,0},
         {0,0,0,0,0},
@@ -754,10 +915,10 @@ void setup(void) {
 
     // Write grid to bit representation
     for (int row = 0; row < GRID_HEIGHT; row++) {
-        for (int col = 0; col < GRID_LENGTH; col++) {
+        for (int col = 0; col < GRID_WIDTH; col++) {
             bit_assign(
-                &grid_enc[((GRID_LENGTH * row) + col) / (SIZE_BOOL_CONT * 8)],
-                ((GRID_LENGTH * row) + col) % (SIZE_BOOL_CONT * 8),
+                &grid_enc[((GRID_WIDTH * row) + col) / (SIZE_BOOL_CONT * 8)],
+                ((GRID_WIDTH * row) + col) % (SIZE_BOOL_CONT * 8),
                 new_grid[row][col]
             );
         }
@@ -773,36 +934,26 @@ void setup(void) {
     DIR *sprite_dir = opendir(SPRITE_PATH);
     if (sprite_dir) {
         struct dirent *entry;
-        SDL_Texture *new_sprite;
         while ((entry = readdir(sprite_dir))) {
             if (entry->d_type == DT_REG) {
-                // Create full relative path to sprite file
-                char *full_path;
-                asprintf(&full_path, SPRITE_PATH "%s", entry->d_name);
+                int name_len = strlen(entry->d_name) - 3;
+                char name[name_len + 1];
+                strlcpy(name, entry->d_name, name_len);
+                load_sprite(entry->d_name, name);
+            } else if (entry->d_type == DT_DIR && entry->d_name[0] != '.') {
+                // Load sprite 1 in with the name of the directory so it serves as the first frame of the rotation
+                char *first;
+                asprintf(&first, "%s/1.png", entry->d_name);
+                load_sprite(first, entry->d_name);
+                free(first);
 
-                // Get sprite
-                new_sprite = IMG_LoadTexture(renderer, full_path);
-                free(full_path);
-
-                if (new_sprite) {
-                    // Allocate space for texture and name
-                    sprites = realloc(sprites, ++num_sprites * sizeof(SDL_Texture *));
-                    sprite_names = realloc(sprite_names, num_sprites * sizeof(char *));
-
-                    // Add texture to list
-                    sprites[num_sprites - 1] = new_sprite;
-
-                    // Add name to list
-                    // Allocate strlen - 3 because the .png should be cut off but leave room for terminating character
-                    int new_name_size = strlen(entry->d_name) - 3;
-                    sprite_names[num_sprites - 1] = malloc(new_name_size);
-                    strlcpy(sprite_names[num_sprites - 1], entry->d_name, new_name_size);
-
-                    // Set sprite not found index if not already set
-                    if (sprite_not_found_num == -1 && strcmp(sprite_names[num_sprites - 1], SPRITE_NOT_FOUND_NAME) == 0)
-                        sprite_not_found_num = num_sprites - 1;
-                } else
-                    printf("Could not load sprite %s\n", entry->d_name);
+                // Load the rest of the sprites with NULL names
+                char *others;
+                for (int i = 2; i <= NUM_ROT_SPRITE_FRAMES; i++) {
+                    asprintf(&others, "%s/%d.png", entry->d_name, i);
+                    load_sprite(others, NULL);
+                    free(others);
+                }
             }
         }
         closedir(sprite_dir);
@@ -811,38 +962,20 @@ void setup(void) {
     }
 
     // Debug mobjs
-    #define mobj(x, y, name) mobj_create(x * GRID_SPACING, y * GRID_SPACING, name)
+    #define mobj_flat(x, y, name) mobj_create(x * GRID_SPACING, y * GRID_SPACING, name)
+    #define mobj_rot(x, y, angle, name) rot_mobj_create(x * GRID_SPACING, y * GRID_SPACING, angle, name)
     
     // Army of MJs
     for (float x = 14.9; x < 24; x += 2) {
         for (int y = 11; y < 21; y += 2) {
-            mobj(x, y, "mj1");
+            mobj_flat(x, y, "mj1");
         }
     }
-    
-    // Debug mobjs against starting wall
-    for (int x = 6; x < 15; x += 2) {
-        mobj(x, 1.1, "1");
-    }
-    
-    // At corner in starting area
-    //mobj(12, 3.9, "1");
 
-    // Against end wall
-    for (int y = 4; y < 10; y += 2) {
-        mobj(19.9, y, "2");
-    }
-
-    // Other starting wall
-    for (float x = 7.1; x < 12; x += 2) {
-        mobj(x, 4.9, "1");
-    }
-
-    // Around first corner
-    mobj(7, 12.9, "3");
+    mobj_rot(3, 3, 0, "couch");
 }
 
-Uint8 prev_state[SDL_SCANCODE_COUNT];
+bool prev_state[SDL_SCANCODE_COUNT];
 int key_just_pressed(int scancode) {
     return state[scancode] && !prev_state[scancode];
 }
@@ -890,27 +1023,24 @@ void process_input(void) {
     }
 
     if (view_mode == VIEW_FPS || view_mode == VIEW_GRID) {
-
-        if (state[SDL_SCANCODE_RIGHT]) rotation_input++;
-        if (state[SDL_SCANCODE_LEFT]) rotation_input--;
-
-        if (state[SDL_SCANCODE_R]) {
-            reset_grid_cam();
-            reset_player();
-        }
-
-        if (state[SDL_SCANCODE_W]) vertical_input++;
-        if (state[SDL_SCANCODE_S]) vertical_input--;
-        if (state[SDL_SCANCODE_A]) horizontal_input--;
-        if (state[SDL_SCANCODE_D]) horizontal_input++;
-
         if (key_just_pressed(SDL_SCANCODE_2)) set_view(VIEW_GRID);
         if (key_just_pressed(SDL_SCANCODE_1)) set_view(VIEW_FPS);
-
         if (key_just_pressed(SDL_SCANCODE_C)) toggle(&grid_follow_player);
 
-        // if (state[SDL_SCANCODE_UP]) fp_scale *= 1.01f;
-        // if (state[SDL_SCANCODE_DOWN]) fp_scale /= 1.01f;
+        if (transition_dir == 0) {
+            if (state[SDL_SCANCODE_RIGHT]) rotation_input++;
+            if (state[SDL_SCANCODE_LEFT]) rotation_input--;
+
+            if (state[SDL_SCANCODE_R]) {
+                reset_grid_cam();
+                reset_player();
+            }
+
+            if (state[SDL_SCANCODE_W]) vertical_input++;
+            if (state[SDL_SCANCODE_S]) vertical_input--;
+            if (state[SDL_SCANCODE_A]) horizontal_input--;
+            if (state[SDL_SCANCODE_D]) horizontal_input++;
+        }
 
     } else if (view_mode == VIEW_TERMINAL && event.type == SDL_EVENT_KEY_DOWN) {
         char key = event.key.key;
@@ -949,6 +1079,7 @@ void process_input(void) {
     memcpy(prev_state, state, sizeof(prev_state));
 }
 
+float delta_time;
 void update(void) {
     int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
 
@@ -957,16 +1088,18 @@ void update(void) {
         SDL_Delay(time_to_wait);
     }
     // Get a delta time factor converted to seconds to be used to update my objects
-    float delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
+    delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
 
     last_frame_time = SDL_GetTicks();
-
-    static float prev_player_x;
-    static float prev_player_y;
+    //
+    // Has anything changed, ie is ther anything to be done?
+    //
 
     // Rotate and apply force to player by input
-    push_player_forward(player_movement_accel * vertical_input);
-    push_player_right(player_movement_accel * horizontal_input);
+    //
+    // Consider only calling these if its required
+    push_player_forward(player_movement_accel * vertical_input * delta_time);
+    push_player_right(player_movement_accel * horizontal_input * delta_time);
     rotate_player(rotation_input * player_angle_increment * player_rotation_speed * delta_time);
 
     // Calculate velocity angle
@@ -1001,7 +1134,7 @@ void update(void) {
     if (!horizontal_input && !vertical_input) {
         if (player_x_velocity != 0) {
             int vel_is_pos = player_x_velocity > 0;
-            player_x_velocity -= cos(player_velocity_angle) * player_movement_decel;
+            player_x_velocity -= cos(player_velocity_angle) * player_movement_decel * delta_time;
             if (vel_is_pos && player_x_velocity < 0)
                 player_x_velocity = 0;
             else if (!vel_is_pos && player_x_velocity > 0)
@@ -1009,7 +1142,7 @@ void update(void) {
         }
         if (player_y_velocity != 0) {
             int vel_is_pos = player_y_velocity > 0;
-            player_y_velocity -= sin(player_velocity_angle) * player_movement_decel;
+            player_y_velocity -= sin(player_velocity_angle) * player_movement_decel * delta_time;
             if (vel_is_pos && player_y_velocity < 0)
                 player_y_velocity = 0;
             else if (!vel_is_pos && player_y_velocity > 0)
@@ -1023,6 +1156,9 @@ void update(void) {
     int southwest_collision = get_grid_bool_coords(player_x - player_radius, player_y + player_radius);
     int northwest_collision = get_grid_bool_coords(player_x - player_radius, player_y - player_radius);
 
+    //
+    // Consider moving macro's into a .h file
+    //
     #define push_left() /*prev_player_x = player_x;*/ player_x = ((((int) player_x + player_radius) / GRID_SPACING) * GRID_SPACING) - player_radius/*; printf("prev_player_x - player_x = %f\n", prev_player_x - player_x); player_y_velocity -= (prev_player_x - player_x) / tanf(player_velocity_angle)*/
     #define push_down() player_y = (((((int) player_y - player_radius) / GRID_SPACING) + 1) * GRID_SPACING) + player_radius
     #define push_right() player_x = (((((int) player_x - player_radius) / GRID_SPACING) + 1) * GRID_SPACING) + player_radius
@@ -1033,6 +1169,10 @@ void update(void) {
     #define push_right_wall() push_right(); player_x_velocity = 0
     #define push_up_wall() push_up(); player_y_velocity = 0
 
+    //
+    // consider moving this into a function so you can abstract the logic
+    // elsewhere and then adjust simply inside the function
+    //
     if (northeast_collision) {
         if (southeast_collision || northwest_collision) {
             if (southeast_collision && player_x_velocity >= 0) {
@@ -1104,10 +1244,18 @@ void update(void) {
         }
     }
 
-    //printf("player velocity: (%f, %f), angle: (%f deg)\n", player_x_velocity, player_y_velocity, rad_deg(player_angle));
-
-    prev_player_x = player_x;
-    prev_player_y = player_y;
+    // Decrement transition timer
+    if (transition_dir != 0) {
+        transition_timer += delta_time * transition_dir;
+        if (transition_dir == 1 && transition_timer > TRANSITION_LEN) {
+            transition_dir = 0;
+            transition_timer = TRANSITION_LEN;
+        } else if (transition_dir == -1 && transition_timer < 0) {
+            transition_timer = 0;
+            transition_dir = 1;
+        }
+        fp_brightness_appl = transition_timer / TRANSITION_LEN;
+    }
 
     // Move player by velocity
     player_x += player_x_velocity * delta_time;
@@ -1117,8 +1265,8 @@ void update(void) {
     if (show_player_trail) fill_dgp(player_x, player_y, DG_YELLOW);
 
     if (grid_follow_player) {
-        grid_cam_x = round( player_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom_p) );
-        grid_cam_y = round( player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom_p) );
+        grid_cam_x = roundf( player_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom_p) );
+        grid_cam_y = roundf( player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom_p) );
     }
 
     
@@ -1129,6 +1277,9 @@ void update(void) {
     vertical_input = 0;
     horizontal_input = 0;
     rotation_input = 0;
+
+    //rot_mobj_head->angle += M_PI / 20;
+    //if (rot_mobj_head->angle > M_PI * 2) rot_mobj_head->angle -= M_PI * 2;
 }
 
 void render(void) {
@@ -1141,7 +1292,7 @@ void render(void) {
     if ((view_mode == VIEW_FPS && fp_show_walls) || show_player_vision || grid_casting) { // Raycasting
         float ray_dists[WINDOW_WIDTH];
 
-        // Raycast and draw walls
+        // Raycast, draw walls, draw floors
         for (int ray_i = 0; ray_i < WINDOW_WIDTH; ray_i++) {
             // Calculate ray angle
             float relative_ray_angle = (radians_per_pixel * ray_i) - (fov / 2);
@@ -1151,12 +1302,8 @@ void render(void) {
 
             char horiz_hit;
             xy hit = raycast(player_x, player_y, ray_angle, &horiz_hit);
-            Uint8 texture_index;
-            if (horiz_hit) {
-                texture_index = horiz_textures[(int) hit.y / GRID_SPACING][(int) hit.x / GRID_SPACING];
-            } else {
-                texture_index = vertical_textures[(int) hit.y / GRID_SPACING][(int) hit.x / GRID_SPACING];
-            }
+            int texture_index = *get_texture_index(hit.x, hit.y, horiz_hit);
+            
             char draw_reverse = (ray_angle < M_PI && horiz_hit) || (M_PI_2 < ray_angle && ray_angle < M_PI + M_PI_2 && !horiz_hit);
 
             if ((view_mode == VIEW_FPS && fp_show_walls) || grid_casting) {
@@ -1167,94 +1314,184 @@ void render(void) {
                     int wall_height = project(ray_dists[ray_i]);
 
                     // Draw texture column
-                    float relative_wall_x = fmodf(horiz_hit ? hit.x : hit.y, GRID_SPACING);
-                    int texture_x = (relative_wall_x / GRID_SPACING) * TEXTURE_WIDTH;
-                    texture_x = draw_reverse ? TEXTURE_WIDTH - texture_x - 1 : texture_x;
-                    float texture_row_height = (float) wall_height / TEXTURE_WIDTH;
-                    float row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
-                    int end = roundf(row_y) - 1;
-                    for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
-                        int start = end;
-                        row_y += texture_row_height;
-                        end = roundf(row_y);
-                        draw_rect_rgb(ray_i, start + 1, 1, end - start, shade_rgb(textures[texture_index][texture_y][texture_x], ray_dists[ray_i]));
+                    char is_wall_visible = ray_dists[ray_i] <= FP_RENDER_DISTANCE;
+                    #if HAS_FLASH
+                    char col_is_flash = ((WINDOW_WIDTH / 2) - (FLASH_WIDTH) / 2) < ray_i && ray_i < ((WINDOW_WIDTH / 2) + (FLASH_WIDTH / 2));
+                    float half_flash_height;
+                    #endif
+
+                    if (
+                        #if HAS_FLASH
+                            is_wall_visible || col_is_flash
+                        #else
+                            is_wall_visible
+                        #endif
+                    ) {
+                        // Constants for both types of wall column
+                        float relative_wall_x = fmodf(horiz_hit ? hit.x : hit.y, GRID_SPACING);
+                        int texture_x = (relative_wall_x / GRID_SPACING) * TEXTURE_WIDTH;
+
+                        if (draw_reverse) {
+                            texture_x = TEXTURE_WIDTH - texture_x - 1;
+                        }
+
+                        float texture_row_height = (float) wall_height / TEXTURE_WIDTH;
+
+                        #if HAS_FLASH // Draw with flashlight
+                        if (col_is_flash) {
+                            half_flash_height = flash_heights[(FLASH_WIDTH / 2) - abs(ray_i - (WINDOW_WIDTH / 2)) - 1];
+                        }
+
+                        float row_y;
+                        // If the wall would not be visible without the flashlight but is in the flashlight's path
+                        if (col_is_flash && !is_wall_visible && half_flash_height * 2 < wall_height) {
+                            row_y = (WINDOW_HEIGHT / 2) - half_flash_height;
+                            float margin_height = fmodf(half_flash_height, texture_row_height);
+                            int texture_y = ((float) TEXTURE_WIDTH / wall_height) * (row_y - ((WINDOW_HEIGHT / 2) - (wall_height / 2.0f)));
+
+                            // Draw topmost texture pixel, partially if needed so the circle looks natural
+                            if (margin_height != 0) {
+                                draw_rect_rgb(ray_i, row_y, 1, margin_height, shade_flash(textures[texture_index][texture_y++][texture_x], ray_dists[ray_i]));
+                            }
+
+                            // Draw uniform texture pixels until bottom edge
+                            for (;row_y + texture_row_height < (WINDOW_HEIGHT / 2) + half_flash_height; row_y += texture_row_height) {
+                                draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_flash(textures[texture_index][texture_y++][texture_x], ray_dists[ray_i]));
+                            }
+
+                            // Draw bottom texture pixel partially
+                            if (margin_height != 0) {
+                                draw_rect_rgb(ray_i, row_y, 1, margin_height, shade_flash(textures[texture_index][texture_y][texture_x], ray_dists[ray_i]));
+                            }
+                        } else {
+                            row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
+                            if (is_wall_visible) {
+                                for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
+                                    rgb original_color = textures[texture_index][texture_y][texture_x];
+                                    draw_rect_rgb(ray_i, row_y, 1, texture_row_height, col_is_flash && (WINDOW_HEIGHT / 2) - half_flash_height < row_y + (texture_row_height / 2) && row_y + (texture_row_height / 2) < (WINDOW_HEIGHT / 2) + half_flash_height ? shade_flash(original_color, ray_dists[ray_i]) : shade_reg(original_color, ray_dists[ray_i]));
+                                    row_y += texture_row_height;
+                                }
+                            } else {
+                                for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
+                                    rgb original_color = textures[texture_index][texture_y][texture_x];
+                                    draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_flash(original_color, ray_dists[ray_i]));
+                                    row_y += texture_row_height;
+                                }
+                            }
+                        }
+                        #else // Draw normal walls, no flashlight
+                        float row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
+                        for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
+                            rgb original_color = textures[texture_index][texture_y][texture_x];
+                            draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_reg(original_color, ray_dists[ray_i]));
+                            row_y += texture_row_height;
+                        }
+                        #endif
+                    }
+                    // Draw floor and ceiling tile pixels below wall
+                    int end_floor;
+                    int end_floor_wall = ceilf(((float) WINDOW_HEIGHT - wall_height) / 2);
+                    if (is_wall_visible) {
+                        end_floor = end_floor_wall;
+                    } else {
+                        end_floor = fp_floor_render_height;
                     }
 
-                    // Draw floor and ceiling tile pixels below wall
-                    int end_floor = ceilf(((float) WINDOW_HEIGHT - wall_height) / 2);
+                    #if HAS_FLASH
+                    char flash_shows_floor = !is_wall_visible && (int) (half_flash_height * 2) > wall_height;
+                    char row_is_flash = FALSE;
+                    char drawing_flash = FALSE;
+                    #endif
                     for (int pixel_y = 0; pixel_y < end_floor; pixel_y += FLOOR_RES) {
-                        // Player height reference
-                        float dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (pixel_y + (FLOOR_RES / 2)))) * fp_scale;
-                        float proj_dist_to_point = dist_to_point / cosf(relative_ray_angle);
-                        
-                        float point_x = (cosf(ray_angle) * proj_dist_to_point) + player_x;
-                        float point_y = (sinf(ray_angle) * proj_dist_to_point) + player_y;
+                        // Remove height if drawing up to the wall slice or end of visibility
+                        int row_height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
 
-                        int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
-                        int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                        // Check to see if we have entered the flashlight's area
+                        #if HAS_FLASH
+                        if (!row_is_flash && pixel_y > (WINDOW_HEIGHT / 2) - half_flash_height) {
+                            row_is_flash = TRUE;
+                        #endif
 
-                        int height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
-                        rgb shaded_color = shade_rgb(textures[2][texture_y][texture_x], proj_dist_to_point);
-                        draw_rect_rgb(ray_i, pixel_y, 1, height, shaded_color);
-                        draw_rect_rgb(ray_i, WINDOW_HEIGHT - pixel_y - height, 1, height, shaded_color);
+                        draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y, row_height 
+                            #if HAS_FLASH
+                            , row_is_flash
+                            #endif
+                        );
+
+                        // Jump ahead to flashlight area and draw if the flashlight is illuminating an area too far
+                        // away to see normally
+                        #if HAS_FLASH
+                        if (!drawing_flash && flash_shows_floor && pixel_y + FLOOR_RES > fp_floor_render_height) {
+                            drawing_flash = TRUE;
+                            pixel_y = (WINDOW_HEIGHT / 2) - half_flash_height;
+                            int margin_height = FLOOR_RES - (pixel_y % FLOOR_RES);
+
+                            // Draw margin row so that the flash circle looks natural
+                            draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y, margin_height, TRUE);
+
+                            // Get back onto the set increment path for the rows so the texturing looks the same
+                            pixel_y += margin_height - FLOOR_RES;
+
+                            end_floor = end_floor_wall;
+                        }
+                        #endif
                     }
                 }
             }
         }
 
         if (view_mode == VIEW_FPS || grid_casting) {
+
             // Store positions and distances of sprites on screen
             for (mobj *o = mobj_head; o; o = o->next) {
-                // Get angle relative to left edge of player vision
-                float angle = atan2f(o->y - player_y, o->x - player_x);
-                if (angle < 0) angle += (M_PI * 2);
+                float angle_to = get_mobj_angle(o->x, o->y);
+                add_sprite_proj(o->x, o->y, angle_to, o->sprite_num);                
+            }
 
-                float mobj_distance = fp_dist(o->x, o->y, angle);
-
-                // Store, sorted farthest to closest, for rendering
-                sprite_proj *new_proj = sprite_proj_create(mobj_distance, angle, o);
-                
-                if (sprite_proj_head) {
-                    if (sprite_proj_head->dist < mobj_distance) {
-                        new_proj->next = sprite_proj_head;
-                        sprite_proj_head = new_proj;
-                    } else {
-                        // Find closest greater sprite
-                        sprite_proj *greater = sprite_proj_head;
-                        for (;greater->next && greater->next->dist > mobj_distance; greater = greater->next);
-
-                        // Insert this sprite after the lesser sprite
-                        sprite_proj *lesser = greater->next;
-                        greater->next = new_proj;
-                        new_proj->next = lesser;
-                    }
-                } else {
-                    sprite_proj_head = new_proj;
-                }
+            for (rot_mobj *o = rot_mobj_head; o; o = o->next) {
+                float angle_to = get_mobj_angle(o->x, o->y);
+                float relative_angle = player_angle + o->angle + (rot_sprite_incr / 2);
+                if (relative_angle > M_PI * 2) relative_angle -= M_PI * 2;
+                add_sprite_proj(o->x, o->y, angle_to, o->sprite_num + (int) (relative_angle / rot_sprite_incr));
             }
 
             // Render sprites
             for (sprite_proj *sprite = sprite_proj_head; sprite; sprite = sprite->next) {
                 int sprite_height = project(sprite->dist);
 
-                // Scale sprite width using height
-                float image_width, image_height;
-                SDL_GetTextureSize(sprites[sprite->obj->sprite_num], &image_width, &image_height);
-                int sprite_width = ((float) sprite_height / image_height) * image_width;
-          
                 // Calculate screen x pos
                 float relative_angle = sprite->angle - (player_angle - (fov / 2));
                 if (relative_angle > M_PI * 2) relative_angle -= M_PI * 2;
                 else if (relative_angle < 0) relative_angle += M_PI * 2;
                 int screen_x = (WINDOW_WIDTH / fov) * relative_angle;
 
+                SDL_Texture *sprite_to_draw = sprites[sprite->sprite_num];
+
+                // Scale sprite width using height
+                float image_width, image_height;
+                SDL_GetTextureSize(sprite_to_draw, &image_width, &image_height);
+                int sprite_width = ((float) sprite_height / image_height) * image_width;
+
                 // End if sprite would draw completely off screen
-                if (screen_x > WINDOW_WIDTH + (sprite_width / 2) && screen_x < pixel_fov_circumfrence - (sprite_width / 2))
+                // OR the sprite is farther than the render distance and isn't in the flashlight
+                #if HAS_FLASH
+                char is_in_flash = (
+                    screen_x - (sprite_width / 2) > (WINDOW_WIDTH / 2) + (FLASH_WIDTH / 2) ||
+                    screen_x + (sprite_width / 2) < (WINDOW_WIDTH / 2) - (FLASH_WIDTH / 2)
+                );
+                #endif
+                if (
+                    (screen_x > WINDOW_WIDTH + (sprite_width / 2) && screen_x < pixel_fov_circumfrence - (sprite_width / 2))
+                    #if HAS_FLASH
+                    || (sprite->dist > FP_RENDER_DISTANCE && is_in_flash)
+                    #endif
+                ) {
                     continue;
+                }
 
                 // Shade sprite by distance
-                unsigned char sprite_shading = shade(255, sprite->dist);
-                SDL_SetTextureColorMod(sprites[sprite->obj->sprite_num], sprite_shading, sprite_shading, sprite_shading);
+                unsigned char sprite_shading = shade(255, sprite->dist, FP_RENDER_DISTANCE, FP_BRIGHTNESS);
+                SDL_SetTextureColorMod(sprite_to_draw, sprite_shading, sprite_shading, sprite_shading);
 
                 // Get start and end of drawing and how much was skipped
                 int start_x = roundf(screen_x - (sprite_width / 2));
@@ -1284,7 +1521,7 @@ void render(void) {
 
                         source.x = texture_col;
                         if (view_mode == VIEW_FPS) {
-                            SDL_RenderTexture(renderer, sprites[sprite->obj->sprite_num], &source, &dest);
+                            SDL_RenderTexture(renderer, sprite_to_draw, &source, &dest);
                         }
                     }
                     dest.x++;
@@ -1294,12 +1531,14 @@ void render(void) {
 
             sprite_proj_destroy_all();
         }
+
+        //draw_rect_a((WINDOW_WIDTH / 2) - (FLASH_WIDTH / 2), (WINDOW_HEIGHT / 2) - (FLASH_WIDTH / 2), FLASH_WIDTH, FLASH_WIDTH, 0, 0, 255, 25);
     }
 
     if (view_mode == VIEW_GRID) { // Grid rendering
         // Grid box fill
         for (int row = 0; row < GRID_HEIGHT; row++) {
-            for (int col = 0; col < GRID_LENGTH; col++) {
+            for (int col = 0; col < GRID_WIDTH; col++) {
                 g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING,
                 get_grid_bool(col, row) ? grid_fill_solid : grid_fill_nonsolid);
             }
@@ -1307,7 +1546,7 @@ void render(void) {
 
         if (show_grid_lines) { // Grid lines
             // Vertical
-            for (int i = 0; i < GRID_LENGTH + 1; i++) {
+            for (int i = 0; i < GRID_WIDTH + 1; i++) {
                 g_draw_rect_rgb(
                     (i * GRID_SPACING) - ceil(grid_line_width / 2), 
                     0,
@@ -1317,11 +1556,11 @@ void render(void) {
                 );
             }
             // Horizontal
-            for (int i = 0; i < GRID_LENGTH + 1; i++) {
+            for (int i = 0; i < GRID_WIDTH + 1; i++) {
                 g_draw_rect_rgb(
                     0,
                     (i * GRID_SPACING) - ceil(grid_line_width / 2),
-                    GRID_LENGTH * GRID_SPACING,
+                    GRID_WIDTH * GRID_SPACING,
                     grid_line_width,
                     grid_line_fill
                 );
@@ -1330,7 +1569,11 @@ void render(void) {
 
         // Map objects
         for (mobj *temp = mobj_head; temp; temp = temp->next) {
-            g_draw_scale_point_rgb(temp->x, temp->y, grid_mobj_radius, mobj_color);
+            g_draw_scale_point_rgb(temp->x, temp->y, grid_mobj_radius, grid_mobj_color);
+        }
+
+        for (rot_mobj *temp = rot_mobj_head; temp; temp = temp->next) {
+            g_draw_scale_point_rgb(temp->x, temp->y, grid_mobj_radius, grid_mobj_color);
         }
 
         // Fill debug grid points
@@ -1340,8 +1583,8 @@ void render(void) {
 
         // Player direction pointer
         g_draw_scale_point_rgb(
-            i_player_x + round(cos(player_angle) * grid_player_pointer_dist),
-            i_player_y + round(sin(player_angle) * grid_player_pointer_dist),
+            i_player_x + roundf(cosf(player_angle) * grid_player_pointer_dist),
+            i_player_y + roundf(sinf(player_angle) * grid_player_pointer_dist),
             player_radius * perc(grid_player_pointer_radius_offset),
             grid_player_fill
         );
@@ -1399,6 +1642,16 @@ void render(void) {
 
         // Input text
         BF_FillTextRgb(terminal_input->text, terminal_font_size, WINDOW_WIDTH, terminal_font_color, TRUE);
+    }
+
+    // FPS readout
+    if (view_mode != VIEW_TERMINAL) {
+        #define FPS_READOUT_SIZE 5
+        draw_rect_a(0, 0, WINDOW_WIDTH / 2, FPS_READOUT_SIZE * BF_CHAR_WIDTH, 0, 0, 0, 127);
+        char *fps_text;
+        asprintf(&fps_text, "fps %f", 1 / delta_time);
+        BF_DrawText(fps_text, 0, 0, FPS_READOUT_SIZE, -1, 255, 255, 255, FALSE);
+        free(fps_text);
     }
 
     // Clear dg things
