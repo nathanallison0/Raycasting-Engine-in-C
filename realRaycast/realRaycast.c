@@ -6,9 +6,6 @@
 // Extra SDL functions
 #include "../../SDL/SDL3Start.h"
 
-// Grid encoding
-#include "./grid.h"
-
 // Font
 #include "../BasicFont/BasicFont.h"
 
@@ -18,12 +15,6 @@
 // Textures
 #include "textures.h"
 
-void setup(void);
-void process_input(void);
-void update(void);
-void render(void);
-void free_memory(void);
-
 float perc(int);
 void calc_grid_cam_center(void);
 void calc_grid_cam_zoom_p(void);
@@ -31,15 +22,9 @@ void reset_grid_cam(void);
 void reset_player(void);
 void zoom_grid_cam(int);
 void zoom_grid_cam_center(int);
-void g_draw_rect(int, int, int, int, unsigned char, unsigned char, unsigned char);
-void g_draw_rect_rgb(int, int, int, int, rgb);
-void g_draw_point(int, int, float, unsigned char, unsigned char, unsigned char);
-void g_draw_point_rgb(int, int, float, rgb);
 void rotate_player(float);
 void push_player_forward(float);
 void push_player_right(float);
-void g_draw_scale_point(int, int, int, unsigned char, unsigned char, unsigned char);
-void g_draw_scale_point_rgb(int, int, int, rgb);
 
 #define rad_deg(radians) radians * (180 / M_PI)
 #define deg_rad(degrees) degrees * (M_PI / 180)
@@ -62,7 +47,100 @@ typedef struct {
 // Grid
 #define GRID_WIDTH 25
 #define GRID_HEIGHT 25
-bool_cont *grid_enc;
+
+#define get_map(x, y) map[(int) (y)][(int) (x)]
+#define get_map_coords(x, y) get_map((x) / GRID_SPACING, (y) / GRID_SPACING)
+
+#define MAP_HORIZ_DOOR 2
+
+Uint8 map[GRID_HEIGHT][GRID_WIDTH] = {
+//   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
+    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
+    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
+    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 3
+    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1}, // 4
+    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 5
+    {1,1,1,1,0,0,1,1,1,2,1,1,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 6
+    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 7
+    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 8
+    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 9
+    {1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1}, // 10
+    {1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 11
+    {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 12
+    {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 13
+    {1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 14
+    {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 15
+    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 16
+    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 17
+    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 18
+    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 19
+    {1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 20
+    {1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 21
+    {1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1}, // 22
+    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 23
+    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 24
+    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}  // 25
+};
+
+Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_WIDTH] = {
+//   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
+    {0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
+    {0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 25
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}  // 26
+};
+
+Uint8 vertical_textures[GRID_HEIGHT][GRID_WIDTH + 1] = {
+//   1 2 3 4 5 6 7 8 9 1011121314151617181920212223242526
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
+    {0,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
+    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} // 25
+};
+
 // Grid visual
 rgb grid_bg = {255, 0, 255};
 rgb grid_fill_nonsolid = {235, 235, 235};
@@ -118,17 +196,16 @@ rgb grid_player_fill = {255, 50, 50};
 char grid_follow_player = TRUE;
 char show_player_vision = FALSE;
 char show_player_trail = FALSE;
-#define PLAYER_VISION_LINES FALSE
 
 // Grid mobjs
 int grid_mobj_radius = 7;
 
 // First person rendering
 float fp_scale = 1 / 0.009417f;
-#define FP_RENDER_DISTANCE 500
-#define FP_BRIGHTNESS 0.75f
-#define HAS_FLASH FALSE
+#define FP_RENDER_DISTANCE 2000
+#define FP_BRIGHTNESS 0.9f
 
+#define HAS_FLASH FALSE
 #if HAS_FLASH
 #define FLASH_DISTANCE 2000
 #define FLASH_BRIGHTNESS 1.0f
@@ -142,7 +219,7 @@ int fp_floor_render_height;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
 float radians_per_pixel;
-#define FLOOR_RES 7
+#define FLOOR_RES 2
 
 // User Input Variables
 int shift = FALSE;
@@ -211,65 +288,53 @@ __linked_list_all__(
 
 
 // Grid Graphics
-void g_draw_rect(int x, int y, int length, int width, unsigned char r, unsigned char g, unsigned char b) {
+void g_draw_rect(float x, float y, float length, float width, Uint8 r, Uint8 g, Uint8 b) {
     draw_rect(
-        roundf( (x - grid_cam_x) * grid_cam_zoom_p ),
-        roundf( (y - grid_cam_y) * grid_cam_zoom_p ),
-        ceilf(length * grid_cam_zoom_p),
-        ceilf(width * grid_cam_zoom_p),
+        (x - grid_cam_x) * grid_cam_zoom_p,
+        (y - grid_cam_y) * grid_cam_zoom_p,
+        length * grid_cam_zoom_p,
+        width * grid_cam_zoom_p,
         r, g, b
     );
 }
 
-void g_draw_rect_rgb(int x, int y, int length, int width, rgb color) {
+void g_draw_rect_rgb(float x, float y, float length, float width, rgb color) {
     g_draw_rect(x, y, length, width, color.r, color.g, color.b);
 }
 
-void g_draw_point(int x, int y, float radius, unsigned char r, unsigned char g, unsigned char b) {
+void g_draw_point(float x, float y, float radius, Uint8 r, Uint8 g, Uint8 b) {
     draw_point(
-        roundf((x - grid_cam_x) * grid_cam_zoom_p),
-        roundf((y - grid_cam_y) * grid_cam_zoom_p),
+        (x - grid_cam_x) * grid_cam_zoom_p,
+        (y - grid_cam_y) * grid_cam_zoom_p,
         radius,
         r, g, b
     );
 }
 
-void g_draw_point_rgb(int x, int y, float radius, rgb color) {
+void g_draw_point_rgb(float x, float y, float radius, rgb color) {
     g_draw_point(x, y, radius, color.r, color.g, color.b);
 }
 
-void g_draw_scale_point(int x, int y, int radius, unsigned char r, unsigned char g, unsigned char b) {
-    g_draw_point(x, y, round(radius * grid_cam_zoom_p), r, g, b);
+void g_draw_scale_point(float x, float y, float radius, Uint8 r, Uint8 g, Uint8 b) {
+    g_draw_point(x, y, radius * grid_cam_zoom_p, r, g, b);
 }
 
-void g_draw_scale_point_rgb(int x, int y, int radius, rgb color) {
+void g_draw_scale_point_rgb(float x, float y, float radius, rgb color) {
     g_draw_scale_point(x, y, radius, color.r, color.g, color.b);
 }
 
-void g_draw_line(int x1, int y1, int x2, int y2, unsigned char r, unsigned char g, unsigned char b) {
+void g_draw_line(float x1, float y1, float x2, float y2, Uint8 r, Uint8 g, Uint8 b) {
     draw_line(
-        roundf((x1 - grid_cam_x) * grid_cam_zoom_p),
-        roundf((y1 - grid_cam_y) * grid_cam_zoom_p),
-        roundf((x2 - grid_cam_x) * grid_cam_zoom_p),
-        roundf((y2 - grid_cam_y) * grid_cam_zoom_p),
+        (x1 - grid_cam_x) * grid_cam_zoom_p,
+        (y1 - grid_cam_y) * grid_cam_zoom_p,
+        (x2 - grid_cam_x) * grid_cam_zoom_p,
+        (y2 - grid_cam_y) * grid_cam_zoom_p,
         r, g, b
     );
 }
 
-void g_draw_line_rgb(int x1, int y1, int x2, int y2, rgb color) {
+void g_draw_line_rgb(float x1, float y1, float x2, float y2, rgb color) {
     g_draw_line(x1, y1, x2, y2, color.r, color.g, color.b);
-}
-
-// Grid 
-int get_grid_bool(int x, int y) {
-    return bit_bool(
-        grid_enc[((GRID_WIDTH * y) + x) / (SIZE_BOOL_CONT * 8)],
-        ((GRID_WIDTH * y) + x) % (SIZE_BOOL_CONT * 8)
-    );
-}
-
-int get_grid_bool_coords(int x, int y) {
-    return get_grid_bool(x / GRID_SPACING, y / GRID_SPACING);
 }
 
 // Raycasting
@@ -305,9 +370,10 @@ float fp_dist(float x, float y, float angle_to) {
 #define d_epsilon_h vars[9]
 #define c_epsilon_v vars[10]
 #define d_epsilon_v vars[11]
-void raycast_vars(float x, float y, float angle, float* vars) {
+char raycast_vars(float x, float y, float angle, float *vars) {
+    char quadrant = (int) (angle / M_PI_2) + 1;
     float alpha;
-    if (angle < M_PI_2) {
+    if (quadrant == 1) {
         alpha = angle;
         c_hy = ((ceil(y / GRID_SPACING)) * GRID_SPACING);// - 1;
         c_hx = ((c_hy - y) / tan(alpha)) + x;
@@ -317,8 +383,7 @@ void raycast_vars(float x, float y, float angle, float* vars) {
         c_vy = (tan(alpha) * (c_vx - x)) + y;
         d_vx = GRID_SPACING;
         d_vy = tan(alpha) * (d_vx);
-        
-    } else if (angle < M_PI) {
+    } else if (quadrant == 2) {
         alpha = angle - (M_PI_2);
         c_hy = (ceil(y / GRID_SPACING) * GRID_SPACING);// - 1;
         c_hx = tan(alpha) * (y - c_hy) + x;
@@ -328,7 +393,7 @@ void raycast_vars(float x, float y, float angle, float* vars) {
         c_vy = y + ((x - c_vx) / tan(alpha));
         d_vx = -GRID_SPACING;
         d_vy = GRID_SPACING / tan(alpha);
-    } else if (angle < M_PI + (M_PI_2)) {
+    } else if (quadrant == 3) {
         alpha = angle - M_PI;
         c_hy = (floor(y / GRID_SPACING) * GRID_SPACING);
         c_hx = x + (c_hy - y) / tan(alpha);
@@ -355,11 +420,15 @@ void raycast_vars(float x, float y, float angle, float* vars) {
     d_epsilon_h = (sqrt(pow(d_hx, 2) + pow(d_hy, 2)) / GRID_SPACING) * diagonal_dist;
     c_epsilon_v = (sqrt(pow(c_vx - x, 2) + pow(c_vy - y, 2)) / GRID_SPACING) * diagonal_dist;
     d_epsilon_v = (sqrt(pow(d_vx, 2) + pow(d_vy, 2)) / GRID_SPACING) * diagonal_dist;
+
+    return quadrant;
 }
 
-xy raycast(float x, float y, float angle, char *horiz_hit) {
+#define get_horiz_texture(x, y) horiz_textures   [(int) (y) / GRID_SPACING][(int) (x) / GRID_SPACING]
+#define get_vert_texture(x, y)  vertical_textures[(int) (y) / GRID_SPACING][(int) (x) / GRID_SPACING]
+xy raycast(float x, float y, float angle, int *texture_index, char *horiz_hit) {
     float vars[12];
-    raycast_vars(x, y, angle, vars);
+    char quadrant = raycast_vars(x, y, angle, vars);
 
     while (!(
         !(
@@ -367,16 +436,14 @@ xy raycast(float x, float y, float angle, char *horiz_hit) {
             ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
             
         ) || (
-            ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) ||
-            ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
+            ( get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) ||
+            ( get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
         ))
     ) {
         c_hx += d_hx; c_hy += d_hy;
         c_epsilon_h += d_epsilon_h;
-        #if PLAYER_VISION_LINES
         if (show_player_vision)
             temp_dgp(c_hx, c_hy, DG_BLUE);
-        #endif
     }
 
     while (!(
@@ -384,154 +451,54 @@ xy raycast(float x, float y, float angle, char *horiz_hit) {
             ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
             ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
         ) || (
-            ( get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) ||
-            ( get_grid_bool(c_vx / GRID_SPACING, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool(c_vx / GRID_SPACING, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING) )
+            ( get_map((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_map((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) ||
+            ( get_map(c_vx / GRID_SPACING, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_map(c_vx / GRID_SPACING, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING) )
         ))
     ) {
         c_vx += d_vx; c_vy += d_vy;
         c_epsilon_v += d_epsilon_v;
-        #if PLAYER_VISION_LINES
         if (show_player_vision)
             temp_dgp(c_vx, c_vy, DG_BLUE);
-        #endif
     }
 
     if (point_dist(c_hx, c_hy, x, y) < point_dist(c_vx, c_vy, x, y)) {
-        if (show_player_vision)
-            temp_dgp(c_hx, c_hy, DG_WHITE);
         *horiz_hit = TRUE;
+        *texture_index = get_horiz_texture(c_hx, c_hy);
+
+        // Door handling
+        if (
+            (quadrant <= 2 && get_map_coords(c_hx, c_hy + (GRID_SPACING / 2)) == MAP_HORIZ_DOOR) ||
+            (quadrant >= 3 && get_map_coords(c_hx, c_hy - (GRID_SPACING / 2)) == MAP_HORIZ_DOOR)
+        ) {
+            if (
+                ((quadrant == 1 || quadrant == 2) && (int) c_vy >= c_hy + (GRID_SPACING / 2)) ||
+                ((quadrant == 3 || quadrant == 4) && (int) c_vy <= c_hy - GRID_SPACING / 2)
+            ) {
+                return (xy) {c_hx + (d_hx / 2), c_hy + (d_hy / 2)};
+            } else {
+                *horiz_hit = FALSE;
+                *texture_index = get_vert_texture(c_vx, c_vy);
+                return (xy) {c_vx, c_vy};
+            }
+        }
+
         return (xy) {c_hx, c_hy};
     } else {
-        if (show_player_vision)
-            temp_dgp(c_vx, c_vy, DG_WHITE);
         *horiz_hit = FALSE;
+        *texture_index = get_vert_texture(c_vx, c_vy);
+
+        // Door handling
+        
+
         return (xy) {c_vx, c_vy};
     }
-}
-
-int pointfind_reverse_raycast(float hit_x, float hit_y, float point_x, float point_y, float angle) {
-    float vars[12];
-    raycast_vars(hit_x, hit_y, angle, vars);
-
-    int stop_h = (((int) point_y / GRID_SPACING) + (hit_y < point_y)) * GRID_SPACING;
-    int stop_v = (((int) point_x / GRID_SPACING) + (hit_x < point_x)) * GRID_SPACING;
-
-    char successes = 0;
-    
-    c_hx += d_hx; c_hy += d_hy;
-    c_epsilon_h += d_epsilon_h;
-
-    while (
-        ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) &&
-        ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
-    ) {
-        if (!(
-            (
-                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
-                ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
-            ) && (
-                (hit_y < point_y && c_hy < stop_h) || 
-                (hit_y >= point_y && c_hy > stop_h)
-            )
-        )) {
-            successes++;
-            break;
-        }
-        c_hx += d_hx; c_hy += d_hy;
-        c_epsilon_h += d_epsilon_h;
-    }
-   
-    /* do {
-        c_hx += d_hx; c_hy += d_hy;
-        c_epsilon_h += d_epsilon_h;
-        if (!(
-            (
-                ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
-                ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
-            ) && (
-                (hit_y < point_y && c_hy < stop_h) || 
-                (hit_y >= point_y && c_hy > stop_h)
-            )
-        )) {
-            successes++;
-            break;
-        }
-    } while (
-        ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) &&
-        ( get_grid_bool((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_grid_bool((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
-    ); */
-
-    char prev_success;
-    if (debug_prr) {
-        if (successes == 1) {
-            temp_dgp(c_hx, c_hy, DG_BLUE); // Horizontal success
-        } else {
-            temp_dgp(c_hx, c_hy, DG_RED); // No horizontal success
-            add_dgl(player_x, player_y, c_hx, c_hy, DG_RED);
-        }
-        prev_success = successes;
-    }
-
-    c_vx += d_vx; c_vy += d_vy;
-    c_epsilon_v += d_epsilon_v;
-
-    while (
-        ( get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) &&
-        ( get_grid_bool(c_vx / GRID_SPACING, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool(c_vx / GRID_SPACING, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING) )
-    ) {
-        if (!(
-            (
-                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
-                ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
-            ) && (
-                (hit_x < point_x && c_vx < stop_v) ||
-                (hit_x >= point_x && c_vx > stop_v)
-            )
-        )) {
-            successes++;
-            break;
-        }
-        c_vx += d_vx; c_vy += d_vy;
-        c_epsilon_v += d_epsilon_v;
-    }
-   
-    /* do {
-        c_vx += d_vx; c_vy += d_vy;
-        c_epsilon_v += d_epsilon_v;
-        if (!(
-            (
-                ( 0 < (c_vx / GRID_SPACING) && (c_vx / GRID_SPACING) < GRID_WIDTH ) &&
-                ( 0 < (c_vy / GRID_SPACING) && (c_vy / GRID_SPACING) < GRID_HEIGHT )
-            ) && (
-                (hit_x < point_x && c_vx < stop_v) ||
-                (hit_x >= point_x && c_vx > stop_v)
-            )
-        )) {
-            successes++;
-            break;
-        }
-    } while (
-        ( get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool((c_vx / GRID_SPACING) - 1, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING)) &&
-        ( get_grid_bool(c_vx / GRID_SPACING, (c_vy - (c_epsilon_v / 2)) / GRID_SPACING) || get_grid_bool(c_vx / GRID_SPACING, (c_vy + (c_epsilon_v / 2)) / GRID_SPACING) )
-    ); */
-
-    if (debug_prr) {
-        if (successes == prev_success) {
-            temp_dgp(c_vx, c_vy, DG_RED); // No vertical success
-            add_dgl(player_x, player_y, c_vx, c_vy, DG_RED);
-        } else {
-            temp_dgp(c_vx, c_vy, DG_PURPLE); // Vertical success
-        }
-    }
-
-    return successes == 2;
 }
 
 int project(float distance) {
     return WINDOW_HEIGHT / (distance / fp_scale);
 }
 
-unsigned char shade(unsigned char color, float distance, float render_distance, float bright) {
+Uint8 shade(Uint8 color, float distance, float render_distance, float bright) {
     return (color - (((float) color / render_distance) * distance)) * bright * fp_brightness_appl;
 }
 
@@ -725,73 +692,6 @@ void load_sprite(char *relative_path, char *name) {
     }
 }
 
-Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_WIDTH] = {
-//   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 25
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}  // 26
-};
-
-Uint8 vertical_textures[GRID_HEIGHT][GRID_WIDTH + 1] = {
-//   1 2 3 4 5 6 7 8 9 1011121314151617181920212223242526
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} // 25
-};
-
-Uint8 *get_texture_index(float x, float y, char horiz_hit) {
-    if (horiz_hit) {
-        return &horiz_textures[(int) y / GRID_SPACING][(int) x / GRID_SPACING];
-    } else {
-        return &vertical_textures[(int) y / GRID_SPACING][(int) x / GRID_SPACING];
-    }
-}
-
 const bool *state;
 void setup(void) {
     // Initialize keyboard state
@@ -803,126 +703,13 @@ void setup(void) {
     rot_sprite_incr = ((M_PI * 2) / NUM_ROT_SPRITE_FRAMES);
 
     // Calculate flashlight heights
-    #if HAS_FLASh
+    #if HAS_FLASH
     for (int i = 0; i < FLASH_WIDTH / 2; i++) {
         flash_heights[i] = sqrtf(FLASH_RAD_SQUARED - powf(i - (FLASH_WIDTH / 2), 2));
     }
     #endif
 
     fp_brightness_appl = FP_BRIGHTNESS;
-
-    grid_enc = (bool_cont *) malloc(ceil( (float) ((GRID_WIDTH * GRID_HEIGHT) / SIZE_BOOL_CONT) ));
-
-    int new_grid[GRID_HEIGHT][GRID_WIDTH] = {
-        /*
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-        {1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,1,1,0,0,0,0,1,0,1,0,0,1,0,0,1},
-        {1,1,1,0,0,0,0,1,0,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1},
-        {1,0,0,1,0,0,0,1,1,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1},
-        {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,1},
-        {1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1},
-        {1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1},
-        {1,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1},
-        {1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1},
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
-        */
-        /*
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
-        */
-        
-    //   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 3
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1}, // 4
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 5
-        {1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 6
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 7
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 8
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 9
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1}, // 10
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 11
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 12
-        {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 13
-        {1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 14
-        {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 15
-        {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 16
-        {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 17
-        {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 18
-        {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 19
-        {1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 20
-        {1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 21
-        {1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1}, // 22
-        {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 23
-        {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 24
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}  // 25
-        
-        /*
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1},
-        {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}
-        */
-        /*
-        {0,0,0,0,0},
-        {0,0,0,0,0},
-        {0,0,0,0,0},
-        {0,0,0,0,0},
-        {0,0,0,0,0}
-        */
-    };
-
-    // Write grid to bit representation
-    for (int row = 0; row < GRID_HEIGHT; row++) {
-        for (int col = 0; col < GRID_WIDTH; col++) {
-            bit_assign(
-                &grid_enc[((GRID_WIDTH * row) + col) / (SIZE_BOOL_CONT * 8)],
-                ((GRID_WIDTH * row) + col) % (SIZE_BOOL_CONT * 8),
-                new_grid[row][col]
-            );
-        }
-    }
 
     // Set player start pos
     reset_player();
@@ -1151,10 +938,10 @@ void update(void) {
     }
 
     // Wall collisions
-    int northeast_collision = get_grid_bool_coords(player_x + player_radius, player_y - player_radius);
-    int southeast_collision = get_grid_bool_coords(player_x + player_radius, player_y + player_radius);
-    int southwest_collision = get_grid_bool_coords(player_x - player_radius, player_y + player_radius);
-    int northwest_collision = get_grid_bool_coords(player_x - player_radius, player_y - player_radius);
+    int northeast_collision = get_map_coords(player_x + player_radius, player_y - player_radius);
+    int southeast_collision = get_map_coords(player_x + player_radius, player_y + player_radius);
+    int southwest_collision = get_map_coords(player_x - player_radius, player_y + player_radius);
+    int northwest_collision = get_map_coords(player_x - player_radius, player_y - player_radius);
 
     //
     // Consider moving macro's into a .h file
@@ -1284,10 +1071,9 @@ void update(void) {
 
 void render(void) {
     // Set background
-    if      (view_mode == VIEW_FPS)      set_draw_color_rgb(C_YELLOW);
-    else if (view_mode == VIEW_GRID)     set_draw_color_rgb(grid_bg);
-    else if (view_mode == VIEW_TERMINAL) set_draw_color_rgb(terminal_bg);
+    set_draw_color_rgb(C_BLACK);
     SDL_RenderClear(renderer);
+    clear_array_window(0);
 
     if ((view_mode == VIEW_FPS && fp_show_walls) || show_player_vision || grid_casting) { // Raycasting
         float ray_dists[WINDOW_WIDTH];
@@ -1301,8 +1087,8 @@ void render(void) {
             else if (ray_angle >= M_PI * 2) ray_angle -= M_PI * 2;
 
             char horiz_hit;
-            xy hit = raycast(player_x, player_y, ray_angle, &horiz_hit);
-            int texture_index = *get_texture_index(hit.x, hit.y, horiz_hit);
+            int texture_index;
+            xy hit = raycast(player_x, player_y, ray_angle, &texture_index, &horiz_hit);
             
             char draw_reverse = (ray_angle < M_PI && horiz_hit) || (M_PI_2 < ray_angle && ray_angle < M_PI + M_PI_2 && !horiz_hit);
 
@@ -1410,6 +1196,7 @@ void render(void) {
                         #if HAS_FLASH
                         if (!row_is_flash && pixel_y > (WINDOW_HEIGHT / 2) - half_flash_height) {
                             row_is_flash = TRUE;
+                        }
                         #endif
 
                         draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y, row_height 
@@ -1438,6 +1225,11 @@ void render(void) {
                     }
                 }
             }
+        }
+
+        if (!grid_casting) {
+            present_array_window();
+            clear_array_window(0);
         }
 
         if (view_mode == VIEW_FPS || grid_casting) {
@@ -1490,7 +1282,7 @@ void render(void) {
                 }
 
                 // Shade sprite by distance
-                unsigned char sprite_shading = shade(255, sprite->dist, FP_RENDER_DISTANCE, FP_BRIGHTNESS);
+                Uint8 sprite_shading = shade(255, sprite->dist, FP_RENDER_DISTANCE, FP_BRIGHTNESS);
                 SDL_SetTextureColorMod(sprite_to_draw, sprite_shading, sprite_shading, sprite_shading);
 
                 // Get start and end of drawing and how much was skipped
@@ -1540,7 +1332,7 @@ void render(void) {
         for (int row = 0; row < GRID_HEIGHT; row++) {
             for (int col = 0; col < GRID_WIDTH; col++) {
                 g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING,
-                get_grid_bool(col, row) ? grid_fill_solid : grid_fill_nonsolid);
+                get_map(col, row) ? grid_fill_solid : grid_fill_nonsolid);
             }
         }
 
@@ -1548,7 +1340,7 @@ void render(void) {
             // Vertical
             for (int i = 0; i < GRID_WIDTH + 1; i++) {
                 g_draw_rect_rgb(
-                    (i * GRID_SPACING) - ceil(grid_line_width / 2), 
+                    (i * GRID_SPACING) - (grid_line_width / 2.0f), 
                     0,
                     grid_line_width,
                     GRID_HEIGHT * GRID_SPACING,
@@ -1559,7 +1351,7 @@ void render(void) {
             for (int i = 0; i < GRID_WIDTH + 1; i++) {
                 g_draw_rect_rgb(
                     0,
-                    (i * GRID_SPACING) - ceil(grid_line_width / 2),
+                    (i * GRID_SPACING) - (grid_line_width / 2.0f),
                     GRID_WIDTH * GRID_SPACING,
                     grid_line_width,
                     grid_line_fill
@@ -1583,8 +1375,8 @@ void render(void) {
 
         // Player direction pointer
         g_draw_scale_point_rgb(
-            i_player_x + roundf(cosf(player_angle) * grid_player_pointer_dist),
-            i_player_y + roundf(sinf(player_angle) * grid_player_pointer_dist),
+            player_x + cosf(player_angle) * grid_player_pointer_dist,
+            player_y + sinf(player_angle) * grid_player_pointer_dist,
             player_radius * perc(grid_player_pointer_radius_offset),
             grid_player_fill
         );
@@ -1627,11 +1419,10 @@ void render(void) {
         // On-screen mouse coords
         if (show_mouse_coords) {
             char *coords_text;
-            asprintf(&coords_text, "(%d, %d) %s", (int) grid_mouse_x, (int) grid_mouse_y, get_grid_bool_coords(grid_mouse_x, grid_mouse_y) ? "true" : "false");
+            asprintf(&coords_text, "(%d, %d) %s", (int) grid_mouse_x, (int) grid_mouse_y, get_map_coords(grid_mouse_x, grid_mouse_y) ? "true" : "false");
             BF_DrawTextRgb(coords_text, mouse_x, mouse_y, 3, -1, C_RED, FALSE);
             free(coords_text);
         }
-
     } else if (view_mode == VIEW_TERMINAL) { // Terminal view
 
         // Output from previous command
@@ -1658,13 +1449,11 @@ void render(void) {
     num_temp_dgps = 0;
     num_dgls = 0;
 
+    present_array_window();
     SDL_RenderPresent(renderer);
 }
 
 void free_memory(void) {
-    // Grid
-    free(grid_enc);
-
     // Fill dgps
     struct fill_dgp *p_i = fill_dgp_head;
     while (p_i) {
@@ -1692,6 +1481,7 @@ int main() {
     printf("Start\n");
 
     game_is_running = initialize_window("Raycasting");
+    initialize_array_window();
 
     setup();
     debugging_start();
@@ -1704,6 +1494,7 @@ int main() {
 
     debugging_end();
     destroy_window();
+    destroy_array_window();
     free_memory();
 
     return 0;
