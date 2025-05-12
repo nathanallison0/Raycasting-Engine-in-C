@@ -15,13 +15,11 @@
 // Textures
 #include "textures.h"
 
-float perc(int);
 void calc_grid_cam_center(void);
-void calc_grid_cam_zoom_p(void);
 void reset_grid_cam(void);
 void reset_player(void);
-void zoom_grid_cam(int);
-void zoom_grid_cam_center(int);
+void zoom_grid_cam(float);
+void zoom_grid_cam_center(float);
 void rotate_player(float);
 void push_player_forward(float);
 void push_player_right(float);
@@ -44,103 +42,9 @@ typedef struct {
     float y;
 } xy;
 
-// Grid
-#define GRID_WIDTH 25
-#define GRID_HEIGHT 25
+#include "map.h"
 
-#define get_map(x, y) map[(int) (y)][(int) (x)]
-#define get_map_coords(x, y) get_map((x) / GRID_SPACING, (y) / GRID_SPACING)
-
-#define MAP_HORIZ_DOOR 2
-
-Uint8 map[GRID_HEIGHT][GRID_WIDTH] = {
-//   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
-    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}, // 1
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 2
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 3
-    {1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1}, // 4
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 5
-    {1,1,1,1,0,0,1,1,1,2,1,1,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 6
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 7
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 8
-    {1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1}, // 9
-    {1,1,1,1,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1}, // 10
-    {1,1,1,1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 11
-    {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 12
-    {1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 13
-    {1,1,1,1,1,1,1,1,1,1,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 14
-    {1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1}, // 15
-    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 16
-    {1,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 17
-    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 18
-    {1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 19
-    {1,0,0,0,0,0,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 20
-    {1,1,1,1,1,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1}, // 21
-    {1,0,0,0,0,0,1,0,0,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,1}, // 22
-    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 23
-    {1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,1}, // 24
-    {1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1}  // 25
-};
-
-Uint8 horiz_textures[GRID_HEIGHT + 1][GRID_WIDTH] = {
-//   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
-    {0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
-    {0,0,0,0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 25
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}  // 26
-};
-
-Uint8 vertical_textures[GRID_HEIGHT][GRID_WIDTH + 1] = {
-//   1 2 3 4 5 6 7 8 9 1011121314151617181920212223242526
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 1
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 2
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 3
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 4
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 5
-    {0,0,0,0,0,0,0,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 6
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 7
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 8
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 9
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 10
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 11
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 12
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 13
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 14
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 15
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 16
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 17
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 18
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 19
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 20
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 21
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 22
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 23
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0}, // 24
-    {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0} // 25
-};
-
+char show_fps = TRUE;
 // Grid visual
 rgb grid_bg = {255, 0, 255};
 rgb grid_fill_nonsolid = {235, 235, 235};
@@ -148,16 +52,17 @@ rgb grid_fill_nonsolid = {235, 235, 235};
 rgb grid_fill_solid = {100, 110, 100};
 int grid_line_width = 1;
 rgb grid_line_fill = C_BLACK;
+#define GRID_DOOR_THICKNESS 4
 char show_grid_lines = FALSE;
 // Grid Visual Camera
-int grid_cam_x;
-int grid_cam_y;
-int grid_cam_zoom;
-float grid_cam_zoom_p;
-int grid_cam_zoom_min;
-int grid_cam_zoom_max;
-int grid_cam_center_x;
-int grid_cam_center_y;
+float grid_cam_x;
+float grid_cam_y;
+float grid_cam_zoom;
+float grid_cam_zoom_incr = 0.025f;
+float grid_cam_zoom_min = 0.1f;
+float grid_cam_zoom_max = 1.25f;
+float grid_cam_center_x;
+float grid_cam_center_y;
 char show_mouse_coords = FALSE;
 float grid_mouse_x, grid_mouse_y;
 char grid_casting = FALSE;
@@ -165,9 +70,7 @@ char debug_prr = FALSE;
 
 // Player
 float player_x;
-int i_player_x;
 float player_y;
-int i_player_y;
 int player_radius = 10;
 float player_x_velocity;
 float player_y_velocity;
@@ -181,17 +84,14 @@ float player_angle_increment = M_PI / 18;
 int player_rotation_speed = 8;
 
 // Player interaction
+#define KEY_OPEN_DOOR SDL_SCANCODE_SPACE
+#define OPEN_DOOR_DIST GRID_SPACING * 2
 #define TRANSITION_LEN 0.5
 float transition_timer = -1;
 char transition_dir = 0;
 
-void assign_i_player_pos(void) {
-    i_player_x = roundf(player_x);
-    i_player_y = roundf(player_y);
-}
 // Player grid visual
 int grid_player_pointer_dist = 15;
-int grid_player_pointer_radius_offset = 50;
 rgb grid_player_fill = {255, 50, 50};
 char grid_follow_player = TRUE;
 char show_player_vision = FALSE;
@@ -205,21 +105,12 @@ float fp_scale = 1 / 0.009417f;
 #define FP_RENDER_DISTANCE 2000
 #define FP_BRIGHTNESS 0.9f
 
-#define HAS_FLASH FALSE
-#if HAS_FLASH
-#define FLASH_DISTANCE 2000
-#define FLASH_BRIGHTNESS 1.0f
-#define FLASH_WIDTH (WINDOW_WIDTH / 6)
-#define FLASH_RAD_SQUARED ((FLASH_WIDTH / 2) * (FLASH_WIDTH / 2))
-float flash_heights[FLASH_WIDTH / 2];
-#endif
-
 float fp_brightness_appl;
 int fp_floor_render_height;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
 float radians_per_pixel;
-#define FLOOR_RES 2
+//#define FLOOR_RES 1
 
 // User Input Variables
 int shift = FALSE;
@@ -267,6 +158,7 @@ __linked_list_all_add__(
     (float x, float y, float angle, char *sprite_name),
         item->x = x;
         item->y = y;
+        item->angle = angle;
         __get_sprite_num__()
         num_rot_mobjs++
 )
@@ -290,10 +182,10 @@ __linked_list_all__(
 // Grid Graphics
 void g_draw_rect(float x, float y, float length, float width, Uint8 r, Uint8 g, Uint8 b) {
     draw_rect(
-        (x - grid_cam_x) * grid_cam_zoom_p,
-        (y - grid_cam_y) * grid_cam_zoom_p,
-        length * grid_cam_zoom_p,
-        width * grid_cam_zoom_p,
+        (x - grid_cam_x) * grid_cam_zoom,
+        (y - grid_cam_y) * grid_cam_zoom,
+        length * grid_cam_zoom,
+        width * grid_cam_zoom,
         r, g, b
     );
 }
@@ -304,8 +196,8 @@ void g_draw_rect_rgb(float x, float y, float length, float width, rgb color) {
 
 void g_draw_point(float x, float y, float radius, Uint8 r, Uint8 g, Uint8 b) {
     draw_point(
-        (x - grid_cam_x) * grid_cam_zoom_p,
-        (y - grid_cam_y) * grid_cam_zoom_p,
+        (x - grid_cam_x) * grid_cam_zoom,
+        (y - grid_cam_y) * grid_cam_zoom,
         radius,
         r, g, b
     );
@@ -316,7 +208,7 @@ void g_draw_point_rgb(float x, float y, float radius, rgb color) {
 }
 
 void g_draw_scale_point(float x, float y, float radius, Uint8 r, Uint8 g, Uint8 b) {
-    g_draw_point(x, y, radius * grid_cam_zoom_p, r, g, b);
+    g_draw_point(x, y, radius * grid_cam_zoom, r, g, b);
 }
 
 void g_draw_scale_point_rgb(float x, float y, float radius, rgb color) {
@@ -325,10 +217,10 @@ void g_draw_scale_point_rgb(float x, float y, float radius, rgb color) {
 
 void g_draw_line(float x1, float y1, float x2, float y2, Uint8 r, Uint8 g, Uint8 b) {
     draw_line(
-        (x1 - grid_cam_x) * grid_cam_zoom_p,
-        (y1 - grid_cam_y) * grid_cam_zoom_p,
-        (x2 - grid_cam_x) * grid_cam_zoom_p,
-        (y2 - grid_cam_y) * grid_cam_zoom_p,
+        (x1 - grid_cam_x) * grid_cam_zoom,
+        (y1 - grid_cam_y) * grid_cam_zoom,
+        (x2 - grid_cam_x) * grid_cam_zoom,
+        (y2 - grid_cam_y) * grid_cam_zoom,
         r, g, b
     );
 }
@@ -375,71 +267,155 @@ char raycast_vars(float x, float y, float angle, float *vars) {
     float alpha;
     if (quadrant == 1) {
         alpha = angle;
-        c_hy = ((ceil(y / GRID_SPACING)) * GRID_SPACING);// - 1;
-        c_hx = ((c_hy - y) / tan(alpha)) + x;
-        d_hx = GRID_SPACING / tan(alpha);
+        c_hy = ((ceilf(y / GRID_SPACING)) * GRID_SPACING);// - 1;
+        c_hx = ((c_hy - y) / tanf(alpha)) + x;
+        d_hx = GRID_SPACING / tanf(alpha);
         d_hy = GRID_SPACING;
-        c_vx = (floor(x / GRID_SPACING) * GRID_SPACING) + GRID_SPACING;
-        c_vy = (tan(alpha) * (c_vx - x)) + y;
+        c_vx = (floorf(x / GRID_SPACING) * GRID_SPACING) + GRID_SPACING;
+        c_vy = (tanf(alpha) * (c_vx - x)) + y;
         d_vx = GRID_SPACING;
-        d_vy = tan(alpha) * (d_vx);
+        d_vy = tanf(alpha) * (d_vx);
     } else if (quadrant == 2) {
         alpha = angle - (M_PI_2);
-        c_hy = (ceil(y / GRID_SPACING) * GRID_SPACING);// - 1;
-        c_hx = tan(alpha) * (y - c_hy) + x;
+        c_hy = (ceilf(y / GRID_SPACING) * GRID_SPACING);// - 1;
+        c_hx = tanf(alpha) * (y - c_hy) + x;
         d_hy = GRID_SPACING;
         d_hx = -GRID_SPACING * tan(alpha);
-        c_vx = (floor(x / GRID_SPACING) * GRID_SPACING);// - 1;
-        c_vy = y + ((x - c_vx) / tan(alpha));
+        c_vx = (floorf(x / GRID_SPACING) * GRID_SPACING);// - 1;
+        c_vy = y + ((x - c_vx) / tanf(alpha));
         d_vx = -GRID_SPACING;
-        d_vy = GRID_SPACING / tan(alpha);
+        d_vy = GRID_SPACING / tanf(alpha);
     } else if (quadrant == 3) {
         alpha = angle - M_PI;
-        c_hy = (floor(y / GRID_SPACING) * GRID_SPACING);
-        c_hx = x + (c_hy - y) / tan(alpha);
+        c_hy = (floorf(y / GRID_SPACING) * GRID_SPACING);
+        c_hx = x + (c_hy - y) / tanf(alpha);
         d_hy = -GRID_SPACING;
-        d_hx = -GRID_SPACING * tan((M_PI_2) - alpha);
-        c_vx = (floor(x / GRID_SPACING) * GRID_SPACING);// - 1;
-        c_vy = y - (tan(alpha) * (x - c_vx));
+        d_hx = -GRID_SPACING * tanf((M_PI_2) - alpha);
+        c_vx = (floorf(x / GRID_SPACING) * GRID_SPACING);// - 1;
+        c_vy = y - (tanf(alpha) * (x - c_vx));
         d_vx = -GRID_SPACING;
-        d_vy = -GRID_SPACING * tan(alpha);
+        d_vy = -GRID_SPACING * tanf(alpha);
     } else {
         alpha = angle - (M_PI + (M_PI_2));
         c_hy = ((floor(y / GRID_SPACING) - 1) * GRID_SPACING) + GRID_SPACING;
-        c_hx = x - tan(alpha) * (c_hy - y);
+        c_hx = x - tanf(alpha) * (c_hy - y);
         d_hy = -GRID_SPACING;
         d_hx = GRID_SPACING * tan(alpha);
-        c_vx = (floor(x / GRID_SPACING) * GRID_SPACING) + GRID_SPACING;
-        c_vy = y - (c_vx - x) / tan(alpha);
+        c_vx = (floorf(x / GRID_SPACING) * GRID_SPACING) + GRID_SPACING;
+        c_vy = y - (c_vx - x) / tanf(alpha);
         d_vx = GRID_SPACING;
-        d_vy = -GRID_SPACING / tan(alpha);
+        d_vy = -GRID_SPACING / tanf(alpha);
     }
 
     float diagonal_dist = fabs((M_PI_4) - alpha) / (M_PI * 200);
-    c_epsilon_h = (sqrt(pow(c_hx - x, 2) + pow(c_hy - y, 2)) / GRID_SPACING) * diagonal_dist;
-    d_epsilon_h = (sqrt(pow(d_hx, 2) + pow(d_hy, 2)) / GRID_SPACING) * diagonal_dist;
-    c_epsilon_v = (sqrt(pow(c_vx - x, 2) + pow(c_vy - y, 2)) / GRID_SPACING) * diagonal_dist;
-    d_epsilon_v = (sqrt(pow(d_vx, 2) + pow(d_vy, 2)) / GRID_SPACING) * diagonal_dist;
+    c_epsilon_h = (sqrtf(powf(c_hx - x, 2) + powf(c_hy - y, 2)) / GRID_SPACING) * diagonal_dist;
+    d_epsilon_h = (sqrtf(powf(d_hx, 2) +     powf(d_hy, 2))     / GRID_SPACING) * diagonal_dist;
+    c_epsilon_v = (sqrtf(powf(c_vx - x, 2) + powf(c_vy - y, 2)) / GRID_SPACING) * diagonal_dist;
+    d_epsilon_v = (sqrtf(powf(d_vx, 2) +     powf(d_vy, 2))     / GRID_SPACING) * diagonal_dist;
 
     return quadrant;
 }
 
 #define get_horiz_texture(x, y) horiz_textures   [(int) (y) / GRID_SPACING][(int) (x) / GRID_SPACING]
 #define get_vert_texture(x, y)  vertical_textures[(int) (y) / GRID_SPACING][(int) (x) / GRID_SPACING]
-xy raycast(float x, float y, float angle, int *texture_index, char *horiz_hit) {
+xy raycast(float x, float y, float angle, int *texture_index, int *texture_col, door_info **passed_door) {
     float vars[12];
     char quadrant = raycast_vars(x, y, angle, vars);
 
-    while (!(
-        !(
+    float texture_offset_h = 0;
+    float rel_wall_hit_h;
+    door_info *horiz_door_hit = NULL;
+    while (TRUE) {
+        rel_wall_hit_h = fmodf(c_hx, GRID_SPACING);
+
+        if (!(
             ( 0 < (c_hx / GRID_SPACING) && (c_hx / GRID_SPACING) < GRID_WIDTH ) &&
             ( 0 < (c_hy / GRID_SPACING) && (c_hy / GRID_SPACING) < GRID_HEIGHT )
-            
-        ) || (
-            ( get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) || get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1) ) ||
-            ( get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) || get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING) )
-        ))
-    ) {
+        )) {
+            break;
+        }
+        
+        // Select the grid space to take as the space we hit using an epsilon
+        Uint8 left_down =  get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1);
+        Uint8 right_down = get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, (c_hy / GRID_SPACING) - 1);
+        Uint8 left_up =    get_map((c_hx - (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING);
+        Uint8 right_up =   get_map((c_hx + (c_epsilon_h / 2)) / GRID_SPACING, c_hy / GRID_SPACING);
+
+        Uint8 hit;
+        if ((left_down || left_up) && (right_down || right_up)) {
+            if (rel_wall_hit_h < GRID_SPACING / 2) {
+                goto choose_from_left;
+            } else {
+                goto choose_from_right;
+            }
+        } else if (left_down || left_up) {
+            goto choose_from_left;
+        } else {
+            goto choose_from_right;
+        }
+
+        choose_from_left:
+        if (left_down && left_up) {
+            if (quadrant == 1 || quadrant == 2) {
+                hit = left_down;
+            } else {
+                hit = left_up;
+            }
+        } else if (left_down) {
+            hit = left_down;
+        } else {
+            hit = left_up;
+        }
+        goto process_hit;
+
+        choose_from_right:
+        if (right_down && right_up) {
+            if (quadrant == 1 || quadrant == 2) {
+                hit = right_down;
+            } else {
+                hit = right_up;
+            }
+        } else if (right_down) {
+            hit = right_down;
+        } else {
+            hit = right_up;
+        }
+
+        process_hit:
+        if (hit == MAP_SOLID) {
+            break;
+        } else if (hit == MAP_HORIZ_DOOR) {
+            door_info *door;
+
+            if (quadrant == 1 || quadrant == 2) {
+                door = get_door_coords(c_hx, c_hy + (GRID_SPACING / 2));
+            } else {
+                door = get_door_coords(c_hx, c_hy - (GRID_SPACING / 2));
+            }
+
+            // Record this door as the one passed if we haven't passed one already
+            if (passed_door && door && !*passed_door) {
+                *passed_door = door;
+            }
+
+            // If we are at a door and either the door doesn't open or it does and we have hit it,
+            // register a hit halfway through the space
+            rel_wall_hit_h += d_hx / 2;
+            if (0 <= rel_wall_hit_h && rel_wall_hit_h < GRID_SPACING && (!door || rel_wall_hit_h <= door->progress)) {
+                if (door) {
+                    texture_offset_h = GRID_SPACING - door->progress;
+                }
+                horiz_door_hit = door;
+                break;
+
+            // If we didn't hit it but will again, increment extra to not hit the back side of the door space
+            } else {
+                float next_rel_hit_x = rel_wall_hit_h + (d_hx / 2);
+                if (0 <= next_rel_hit_x && next_rel_hit_x < GRID_SPACING)
+                    c_hx += d_hx; c_hy += d_hy;
+            }
+        }
+
         c_hx += d_hx; c_hy += d_hy;
         c_epsilon_h += d_epsilon_h;
         if (show_player_vision)
@@ -462,33 +438,37 @@ xy raycast(float x, float y, float angle, int *texture_index, char *horiz_hit) {
     }
 
     if (point_dist(c_hx, c_hy, x, y) < point_dist(c_vx, c_vy, x, y)) {
-        *horiz_hit = TRUE;
-        *texture_index = get_horiz_texture(c_hx, c_hy);
+        if (texture_index) {
+            *texture_index = get_horiz_texture(c_hx, c_hy);
+        }
 
-        // Door handling
-        if (
-            (quadrant <= 2 && get_map_coords(c_hx, c_hy + (GRID_SPACING / 2)) == MAP_HORIZ_DOOR) ||
-            (quadrant >= 3 && get_map_coords(c_hx, c_hy - (GRID_SPACING / 2)) == MAP_HORIZ_DOOR)
-        ) {
-            if (
-                ((quadrant == 1 || quadrant == 2) && (int) c_vy >= c_hy + (GRID_SPACING / 2)) ||
-                ((quadrant == 3 || quadrant == 4) && (int) c_vy <= c_hy - GRID_SPACING / 2)
-            ) {
-                return (xy) {c_hx + (d_hx / 2), c_hy + (d_hy / 2)};
-            } else {
-                *horiz_hit = FALSE;
-                *texture_index = get_vert_texture(c_vx, c_vy);
-                return (xy) {c_vx, c_vy};
+        if (texture_col) {
+            *texture_col = ((rel_wall_hit_h + texture_offset_h) / GRID_SPACING) * TEXTURE_WIDTH;
+
+            // Account for drawing reverse for backward-facing walls
+            if (quadrant == 1 || quadrant == 2) {
+                *texture_col = TEXTURE_WIDTH - *texture_col - 1;
             }
         }
 
+        // If hit door, return coordinates in the middle of the space
+        if (horiz_door_hit) {
+            c_hx += d_hx / 2;
+            c_hy += d_hy / 2;
+        }
         return (xy) {c_hx, c_hy};
     } else {
-        *horiz_hit = FALSE;
-        *texture_index = get_vert_texture(c_vx, c_vy);
+        if (texture_index) {
+            *texture_index = get_vert_texture(c_vx, c_vy);
+        }
+        if (texture_col) {
+            *texture_col = (fmodf(c_vy, GRID_SPACING) / GRID_SPACING) * TEXTURE_WIDTH;
 
-        // Door handling
-        
+            // Account for drawing reverse for backward-facing walls
+            if (quadrant == 2 || quadrant == 3) {
+                *texture_col = TEXTURE_WIDTH - *texture_col - 1;
+            }
+        }
 
         return (xy) {c_vx, c_vy};
     }
@@ -498,55 +478,67 @@ int project(float distance) {
     return WINDOW_HEIGHT / (distance / fp_scale);
 }
 
-Uint8 shade(Uint8 color, float distance, float render_distance, float bright) {
-    return (color - (((float) color / render_distance) * distance)) * bright * fp_brightness_appl;
+#define SHADE_DIST 1024
+Uint8 shading_table[SHADE_DIST][256];
+void precompute_shading_table() {
+    for (int i = 0; i < SHADE_DIST; i++) {
+        float dist = ((float) i / SHADE_DIST) * FP_RENDER_DISTANCE;
+        for (int c = 0; c < 256; c++) {
+            float shaded = (c - ((float) c / FP_RENDER_DISTANCE) * dist) * FP_BRIGHTNESS;
+            if (shaded < 0) shaded = 0;
+            else if (shaded > 255) shaded = 255;
+            shading_table[i][c] = (Uint8) shaded;
+        }
+    }
 }
 
-rgb shade_rgb(rgb color, float distance, float render_distance, float bright) {
+Uint8 shade(Uint8 color, float distance) {
+    int index = (distance / FP_RENDER_DISTANCE) * SHADE_DIST;
+    return shading_table[index][color];
+}
+
+rgb shade_rgb(rgb color, float distance) {
     return (rgb) {
-        shade(color.r, distance, render_distance, bright),
-        shade(color.g, distance, render_distance, bright),
-        shade(color.b, distance, render_distance, bright)
+        shade(color.r, distance),
+        shade(color.g, distance),
+        shade(color.b, distance)
     };
 }
 
-#define shade_reg(color, distance) shade_rgb(color, distance, FP_RENDER_DISTANCE, FP_BRIGHTNESS)
-#define shade_flash(color, distance) shade_rgb(color, distance, FLASH_DISTANCE, FLASH_BRIGHTNESS)
+float *floor_side_dist_list = NULL;
+int floor_side_dist_len = 0;
+void draw_floor_texture_bit(float ray_angle, float rel_ray_angle, int x, int y) {
+    // If we have not already calculated projected distance to this y position, calculate
+    // and store in list
+    float side_dist_to_point;
+    if (y == floor_side_dist_len) {
+        // Player height reference
+        side_dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (y/*  + ((float) height / 2) */))) * fp_scale;
 
-void draw_floor_texture_bit(float ray_angle, float rel_ray_angle, int x, int y, int height
-    #if HAS_FLASH
-    , char is_flash
-    #endif
-) {
-    // Get real and project distance to point
-    // Player height reference
-    float dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (y + ((float) height / 2)))) * fp_scale;
-    float proj_dist_to_point = dist_to_point / cosf(rel_ray_angle);
+        //if (height == FLOOR_RES) {
+            floor_side_dist_list = realloc(floor_side_dist_list, ++floor_side_dist_len * sizeof(float));
+            floor_side_dist_list[y] = side_dist_to_point;
+        //}
+    } else {
+        side_dist_to_point = floor_side_dist_list[y];
+    }
+
+    float straight_dist_to_point = side_dist_to_point / cosf(rel_ray_angle);
     
     // Get coordinates of texture point in world space
-    float point_x = (cosf(ray_angle) * proj_dist_to_point) + player_x;
-    float point_y = (sinf(ray_angle) * proj_dist_to_point) + player_y;
+    float point_x = (cosf(ray_angle) * straight_dist_to_point) + player_x;
+    float point_y = (sinf(ray_angle) * straight_dist_to_point) + player_y;
 
     // Find texture coordinates
     int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
     int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
 
     // Shade color
-    #if HAS_FLASH
-    rgb shaded_color;
-    if (is_flash) {
-        shaded_color = shade_flash(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
-    } else {
-        shaded_color = shade_reg(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
-    }
-    #else
-    rgb shaded_color = shade_reg(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], proj_dist_to_point);
-    #endif
-
+    rgb shaded_color = shade_rgb(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], side_dist_to_point);
 
     // Draw on floor and ceiling
-    draw_rect_rgb(x, y, 1, height, shaded_color);
-    draw_rect_rgb(x, WINDOW_HEIGHT - y - height, 1, height, shaded_color);
+    draw_rect_rgb(x, y, 1, 1/* height */, shaded_color);
+    draw_rect_rgb(x, WINDOW_HEIGHT - y/*  - height */, 1, 1/* height */, shaded_color);
 }
 
 float get_mobj_angle(float x, float y) {
@@ -557,12 +549,9 @@ float get_mobj_angle(float x, float y) {
 
 void add_sprite_proj(float x, float y, float angle, int sprite_num) {
     float distance = fp_dist(x, y, angle);
-
-    #if !HAS_FLASH
     if (distance > FP_RENDER_DISTANCE) {
         return;
     }
-    #endif
 
     // Store, sorted farthest to closest, for rendering
     sprite_proj *new_proj = sprite_proj_create(distance, angle, sprite_num);
@@ -586,60 +575,54 @@ void add_sprite_proj(float x, float y, float angle, int sprite_num) {
     }
 }
 
-float perc(int percent) {
-    return (percent / 100.0f);
-}
-
-void calc_grid_cam_zoom_p(void) {
-    grid_cam_zoom_p = perc(grid_cam_zoom);
-}
-
 void calc_grid_cam_center(void) {
-    grid_cam_center_x = grid_cam_x + roundf( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
-    grid_cam_center_y = grid_cam_y + roundf( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
+    grid_cam_center_x = grid_cam_x + ((WINDOW_WIDTH / 2) / grid_cam_zoom);
+    grid_cam_center_y = grid_cam_y + ((WINDOW_HEIGHT / 2) / grid_cam_zoom);
 }
 
 // Resets
 void reset_grid_cam(void) {
     grid_cam_x = 0;
     grid_cam_y = 0;
-    grid_cam_zoom = 100;
-    calc_grid_cam_zoom_p();
-    grid_cam_zoom_min = 40;
-    grid_cam_zoom_max = 300;
+    grid_cam_zoom = 1;
 }
 
 void reset_player(void) {
     player_x = GRID_SPACING * 4;
     player_y = GRID_SPACING * 4;
-    assign_i_player_pos();
     player_x_velocity = 0;
     player_y_velocity = 0;
     player_angle = 0;
 }
 
 // Zoom grid
-void zoom_grid_cam(int zoom) {
+void zoom_grid_cam(float zoom) {
     grid_cam_zoom += zoom;
-    if (grid_cam_zoom < grid_cam_zoom_min) grid_cam_zoom = grid_cam_zoom_min;
-    else if (grid_cam_zoom > grid_cam_zoom_max) grid_cam_zoom = grid_cam_zoom_max;
-    calc_grid_cam_zoom_p();
+    if (grid_cam_zoom < grid_cam_zoom_min) {
+        grid_cam_zoom = grid_cam_zoom_min;
+    } else if (grid_cam_zoom > grid_cam_zoom_max) {
+        grid_cam_zoom = grid_cam_zoom_max;
+    }
 }
 
-void zoom_grid_cam_center(int zoom) {
+void zoom_grid_cam_center(float zoom) {
     calc_grid_cam_center();
-    int old_grid_cam_center_x = grid_cam_center_x;
-    int old_grid_cam_center_y = grid_cam_center_y;
+    float old_grid_cam_center_x = grid_cam_center_x;
+    float old_grid_cam_center_y = grid_cam_center_y;
     zoom_grid_cam(zoom);
-    grid_cam_x = old_grid_cam_center_x - round( (WINDOW_WIDTH / 2) / grid_cam_zoom_p );
-    grid_cam_y = old_grid_cam_center_y - round( (WINDOW_HEIGHT / 2) / grid_cam_zoom_p );
+    grid_cam_x = old_grid_cam_center_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom);
+    grid_cam_y = old_grid_cam_center_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom);
 }
 
 // Player control
 void rotate_player(float angle) {
     player_angle += angle;
-    while (player_angle < 0) player_angle += M_PI * 2;
-    while (player_angle >= M_PI * 2) player_angle -= (M_PI * 2);
+    while (player_angle < 0) {
+        player_angle += M_PI * 2;
+    }
+    while (player_angle >= M_PI * 2) {
+        player_angle -= (M_PI * 2);
+    }
 }
 
 void push_player_forward(float force) {
@@ -702,19 +685,13 @@ void setup(void) {
     fp_floor_render_height = ceilf((WINDOW_HEIGHT - project(FP_RENDER_DISTANCE)) / 2.0f);
     rot_sprite_incr = ((M_PI * 2) / NUM_ROT_SPRITE_FRAMES);
 
-    // Calculate flashlight heights
-    #if HAS_FLASH
-    for (int i = 0; i < FLASH_WIDTH / 2; i++) {
-        flash_heights[i] = sqrtf(FLASH_RAD_SQUARED - powf(i - (FLASH_WIDTH / 2), 2));
-    }
-    #endif
+    precompute_shading_table();
 
     fp_brightness_appl = FP_BRIGHTNESS;
 
     // Set player start pos
     reset_player();
     reset_grid_cam();
-    grid_cam_zoom_p = perc(grid_cam_zoom);
     calc_grid_cam_center();
 
     // Load sprite images
@@ -759,7 +736,7 @@ void setup(void) {
         }
     }
 
-    mobj_rot(3, 3, 0, "couch");
+    mobj_rot(8, 4, M_PI + M_PI_2, "couch");
 }
 
 bool prev_state[SDL_SCANCODE_COUNT];
@@ -782,19 +759,19 @@ void process_input(void) {
             if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = TRUE;
             break;
         case SDL_EVENT_MOUSE_WHEEL:
-            zoom_grid_cam_center(-event.wheel.y);
+            zoom_grid_cam_center(-event.wheel.y * grid_cam_zoom_incr);
             break;
         case SDL_EVENT_MOUSE_MOTION:
             mouse_x = event.motion.x;
             mouse_y = event.motion.y;
             if (show_mouse_coords) {
-                grid_mouse_x = grid_cam_x + (event.motion.x / grid_cam_zoom_p);
-                grid_mouse_y = grid_cam_y + (event.motion.y / grid_cam_zoom_p);
+                grid_mouse_x = grid_cam_x + (event.motion.x / grid_cam_zoom);
+                grid_mouse_y = grid_cam_y + (event.motion.y / grid_cam_zoom);
             }
 
             if (prev_mouse_x != -1 && prev_mouse_y != -1 && left_mouse_down) {
-                grid_cam_x -= roundf( (mouse_x - prev_mouse_x) / grid_cam_zoom_p );
-                grid_cam_y -= roundf( (mouse_y - prev_mouse_y) / grid_cam_zoom_p );
+                grid_cam_x -= (mouse_x - prev_mouse_x) / grid_cam_zoom;
+                grid_cam_y -= (mouse_y - prev_mouse_y) / grid_cam_zoom;
             }
             prev_mouse_x = mouse_x;
             prev_mouse_y = mouse_y;
@@ -814,6 +791,7 @@ void process_input(void) {
         if (key_just_pressed(SDL_SCANCODE_1)) set_view(VIEW_FPS);
         if (key_just_pressed(SDL_SCANCODE_C)) toggle(&grid_follow_player);
 
+        // If we are not in a fade-in or out
         if (transition_dir == 0) {
             if (state[SDL_SCANCODE_RIGHT]) rotation_input++;
             if (state[SDL_SCANCODE_LEFT]) rotation_input--;
@@ -827,6 +805,15 @@ void process_input(void) {
             if (state[SDL_SCANCODE_S]) vertical_input--;
             if (state[SDL_SCANCODE_A]) horizontal_input--;
             if (state[SDL_SCANCODE_D]) horizontal_input++;
+            
+            // Door opening and closing
+            if (key_just_pressed(KEY_OPEN_DOOR)) {
+                door_info *hit_door = NULL;
+                xy hit = raycast(player_x, player_y, player_angle, NULL, NULL, &hit_door);
+                if (hit_door && point_dist(player_x, player_y, hit.x, hit.y) <= OPEN_DOOR_DIST) {
+                    hit_door->progress = hit_door->progress == 0 ? GRID_SPACING : 0;
+                }
+            }
         }
 
     } else if (view_mode == VIEW_TERMINAL && event.type == SDL_EVENT_KEY_DOWN) {
@@ -878,13 +865,8 @@ void update(void) {
     delta_time = (SDL_GetTicks() - last_frame_time) / 1000.0f;
 
     last_frame_time = SDL_GetTicks();
-    //
-    // Has anything changed, ie is ther anything to be done?
-    //
 
-    // Rotate and apply force to player by input
-    //
-    // Consider only calling these if its required
+
     push_player_forward(player_movement_accel * vertical_input * delta_time);
     push_player_right(player_movement_accel * horizontal_input * delta_time);
     rotate_player(rotation_input * player_angle_increment * player_rotation_speed * delta_time);
@@ -1044,16 +1026,17 @@ void update(void) {
         fp_brightness_appl = transition_timer / TRANSITION_LEN;
     }
 
+    //doors[0].progress = (-labs((((ssize_t) (SDL_GetTicks() / 20)) % GRID_SPACING) - (GRID_SPACING / 2)) * 2) + GRID_SPACING;
+
     // Move player by velocity
     player_x += player_x_velocity * delta_time;
     player_y += player_y_velocity * delta_time;
-    assign_i_player_pos();
 
     if (show_player_trail) fill_dgp(player_x, player_y, DG_YELLOW);
 
     if (grid_follow_player) {
-        grid_cam_x = roundf( player_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom_p) );
-        grid_cam_y = roundf( player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom_p) );
+        grid_cam_x = player_x - ((WINDOW_WIDTH / 2) / grid_cam_zoom);
+        grid_cam_y = player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom);
     }
 
     
@@ -1086,11 +1069,8 @@ void render(void) {
             if (ray_angle < 0) ray_angle += M_PI * 2;
             else if (ray_angle >= M_PI * 2) ray_angle -= M_PI * 2;
 
-            char horiz_hit;
-            int texture_index;
-            xy hit = raycast(player_x, player_y, ray_angle, &texture_index, &horiz_hit);
-            
-            char draw_reverse = (ray_angle < M_PI && horiz_hit) || (M_PI_2 < ray_angle && ray_angle < M_PI + M_PI_2 && !horiz_hit);
+            int texture_index, texture_x;
+            xy hit = raycast(player_x, player_y, ray_angle, &texture_index, &texture_x, NULL);
 
             if ((view_mode == VIEW_FPS && fp_show_walls) || grid_casting) {
                 // Get hit distance
@@ -1101,79 +1081,18 @@ void render(void) {
 
                     // Draw texture column
                     char is_wall_visible = ray_dists[ray_i] <= FP_RENDER_DISTANCE;
-                    #if HAS_FLASH
-                    char col_is_flash = ((WINDOW_WIDTH / 2) - (FLASH_WIDTH) / 2) < ray_i && ray_i < ((WINDOW_WIDTH / 2) + (FLASH_WIDTH / 2));
-                    float half_flash_height;
-                    #endif
 
-                    if (
-                        #if HAS_FLASH
-                            is_wall_visible || col_is_flash
-                        #else
-                            is_wall_visible
-                        #endif
-                    ) {
-                        // Constants for both types of wall column
-                        float relative_wall_x = fmodf(horiz_hit ? hit.x : hit.y, GRID_SPACING);
-                        int texture_x = (relative_wall_x / GRID_SPACING) * TEXTURE_WIDTH;
-
-                        if (draw_reverse) {
-                            texture_x = TEXTURE_WIDTH - texture_x - 1;
-                        }
-
+                    if (is_wall_visible) {
                         float texture_row_height = (float) wall_height / TEXTURE_WIDTH;
-
-                        #if HAS_FLASH // Draw with flashlight
-                        if (col_is_flash) {
-                            half_flash_height = flash_heights[(FLASH_WIDTH / 2) - abs(ray_i - (WINDOW_WIDTH / 2)) - 1];
-                        }
-
-                        float row_y;
-                        // If the wall would not be visible without the flashlight but is in the flashlight's path
-                        if (col_is_flash && !is_wall_visible && half_flash_height * 2 < wall_height) {
-                            row_y = (WINDOW_HEIGHT / 2) - half_flash_height;
-                            float margin_height = fmodf(half_flash_height, texture_row_height);
-                            int texture_y = ((float) TEXTURE_WIDTH / wall_height) * (row_y - ((WINDOW_HEIGHT / 2) - (wall_height / 2.0f)));
-
-                            // Draw topmost texture pixel, partially if needed so the circle looks natural
-                            if (margin_height != 0) {
-                                draw_rect_rgb(ray_i, row_y, 1, margin_height, shade_flash(textures[texture_index][texture_y++][texture_x], ray_dists[ray_i]));
-                            }
-
-                            // Draw uniform texture pixels until bottom edge
-                            for (;row_y + texture_row_height < (WINDOW_HEIGHT / 2) + half_flash_height; row_y += texture_row_height) {
-                                draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_flash(textures[texture_index][texture_y++][texture_x], ray_dists[ray_i]));
-                            }
-
-                            // Draw bottom texture pixel partially
-                            if (margin_height != 0) {
-                                draw_rect_rgb(ray_i, row_y, 1, margin_height, shade_flash(textures[texture_index][texture_y][texture_x], ray_dists[ray_i]));
-                            }
-                        } else {
-                            row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
-                            if (is_wall_visible) {
-                                for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
-                                    rgb original_color = textures[texture_index][texture_y][texture_x];
-                                    draw_rect_rgb(ray_i, row_y, 1, texture_row_height, col_is_flash && (WINDOW_HEIGHT / 2) - half_flash_height < row_y + (texture_row_height / 2) && row_y + (texture_row_height / 2) < (WINDOW_HEIGHT / 2) + half_flash_height ? shade_flash(original_color, ray_dists[ray_i]) : shade_reg(original_color, ray_dists[ray_i]));
-                                    row_y += texture_row_height;
-                                }
-                            } else {
-                                for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
-                                    rgb original_color = textures[texture_index][texture_y][texture_x];
-                                    draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_flash(original_color, ray_dists[ray_i]));
-                                    row_y += texture_row_height;
-                                }
-                            }
-                        }
-                        #else // Draw normal walls, no flashlight
+                        
                         float row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
                         for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
                             rgb original_color = textures[texture_index][texture_y][texture_x];
-                            draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_reg(original_color, ray_dists[ray_i]));
+                            draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_rgb(original_color, ray_dists[ray_i]));
                             row_y += texture_row_height;
                         }
-                        #endif
                     }
+
                     // Draw floor and ceiling tile pixels below wall
                     int end_floor;
                     int end_floor_wall = ceilf(((float) WINDOW_HEIGHT - wall_height) / 2);
@@ -1183,48 +1102,55 @@ void render(void) {
                         end_floor = fp_floor_render_height;
                     }
 
-                    #if HAS_FLASH
-                    char flash_shows_floor = !is_wall_visible && (int) (half_flash_height * 2) > wall_height;
-                    char row_is_flash = FALSE;
-                    char drawing_flash = FALSE;
-                    #endif
-                    for (int pixel_y = 0; pixel_y < end_floor; pixel_y += FLOOR_RES) {
+                    for (int pixel_y = 0; pixel_y < end_floor; pixel_y++) {
                         // Remove height if drawing up to the wall slice or end of visibility
-                        int row_height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
+                        //int row_height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
+                        
+                        //draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y);
 
-                        // Check to see if we have entered the flashlight's area
-                        #if HAS_FLASH
-                        if (!row_is_flash && pixel_y > (WINDOW_HEIGHT / 2) - half_flash_height) {
-                            row_is_flash = TRUE;
+                        // If we have not already calculated projected distance to this y position, calculate
+                        // and store in list
+                        float side_dist_to_point;
+                        if (pixel_y == floor_side_dist_len) {
+                            // Player height reference
+                            side_dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (pixel_y/*  + ((float) height / 2) */))) * fp_scale;
+
+                            //if (height == FLOOR_RES) {
+                                floor_side_dist_list = realloc(floor_side_dist_list, ++floor_side_dist_len * sizeof(float));
+                                floor_side_dist_list[pixel_y] = side_dist_to_point;
+                            //}
+                        } else {
+                            side_dist_to_point = floor_side_dist_list[pixel_y];
                         }
-                        #endif
 
-                        draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y, row_height 
-                            #if HAS_FLASH
-                            , row_is_flash
-                            #endif
-                        );
+                        float straight_dist_to_point = side_dist_to_point / cosf(relative_ray_angle);
+                        
+                        // Get coordinates of texture point in world space
+                        float point_x = (cosf(ray_angle) * straight_dist_to_point) + player_x;
+                        float point_y = (sinf(ray_angle) * straight_dist_to_point) + player_y;
 
-                        // Jump ahead to flashlight area and draw if the flashlight is illuminating an area too far
-                        // away to see normally
-                        #if HAS_FLASH
-                        if (!drawing_flash && flash_shows_floor && pixel_y + FLOOR_RES > fp_floor_render_height) {
-                            drawing_flash = TRUE;
-                            pixel_y = (WINDOW_HEIGHT / 2) - half_flash_height;
-                            int margin_height = FLOOR_RES - (pixel_y % FLOOR_RES);
+                        // Find texture coordinates
+                        int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                        int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
 
-                            // Draw margin row so that the flash circle looks natural
-                            draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y, margin_height, TRUE);
+                        // Shade color
+                        rgb shaded_color = shade_rgb(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], side_dist_to_point);
 
-                            // Get back onto the set increment path for the rows so the texturing looks the same
-                            pixel_y += margin_height - FLOOR_RES;
+                        // Draw on floor and ceiling
+                        //draw_rect_rgb(ray_i, pixel_y, 1, 1/* height */, shaded_color);
+                        //draw_rect_rgb(ray_i, WINDOW_HEIGHT - pixel_y/*  - height */, 1, 1/* height */, shaded_color);
 
-                            end_floor = end_floor_wall;
-                        }
-                        #endif
+                        set_pixel_rgb(ray_i, pixel_y, shaded_color);
+                        set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, shaded_color);
                     }
                 }
             }
+        }
+
+        // Free up list of calculated floor point projection distances
+        if (floor_side_dist_len != 0) {
+            free(floor_side_dist_list); floor_side_dist_list = NULL;
+            floor_side_dist_len = 0;
         }
 
         if (!grid_casting) {
@@ -1264,25 +1190,13 @@ void render(void) {
                 SDL_GetTextureSize(sprite_to_draw, &image_width, &image_height);
                 int sprite_width = ((float) sprite_height / image_height) * image_width;
 
-                // End if sprite would draw completely off screen
-                // OR the sprite is farther than the render distance and isn't in the flashlight
-                #if HAS_FLASH
-                char is_in_flash = (
-                    screen_x - (sprite_width / 2) > (WINDOW_WIDTH / 2) + (FLASH_WIDTH / 2) ||
-                    screen_x + (sprite_width / 2) < (WINDOW_WIDTH / 2) - (FLASH_WIDTH / 2)
-                );
-                #endif
-                if (
-                    (screen_x > WINDOW_WIDTH + (sprite_width / 2) && screen_x < pixel_fov_circumfrence - (sprite_width / 2))
-                    #if HAS_FLASH
-                    || (sprite->dist > FP_RENDER_DISTANCE && is_in_flash)
-                    #endif
-                ) {
+                // Don't draw if the sprite is completely offscreen
+                if (screen_x > WINDOW_WIDTH + (sprite_width / 2) && screen_x < pixel_fov_circumfrence - (sprite_width / 2)) {
                     continue;
                 }
 
                 // Shade sprite by distance
-                Uint8 sprite_shading = shade(255, sprite->dist, FP_RENDER_DISTANCE, FP_BRIGHTNESS);
+                Uint8 sprite_shading = shade(255, sprite->dist);
                 SDL_SetTextureColorMod(sprite_to_draw, sprite_shading, sprite_shading, sprite_shading);
 
                 // Get start and end of drawing and how much was skipped
@@ -1304,13 +1218,6 @@ void render(void) {
                 while (dest.x < end_x && dest.x < WINDOW_WIDTH) {
                     // Only draw column if it is in front of its corresponding wall
                     if (ray_dists[(int) dest.x] > sprite->dist) {
-                        // float angle_to_point = ((dest.x * radians_per_pixel) - (fov / 2)) + player_angle;
-                        // float rel_angle_to = angle_to_point - sprite->angle;
-                        // float dist_from_center = sprite->dist * tanf(rel_angle_to);
-
-                        // float sprite_part_x = sprite->obj->x - (dist_from_center * sinf(player_angle));
-                        // float sprite_part_y = sprite->obj->y + (dist_from_center * cosf(player_angle));
-
                         source.x = texture_col;
                         if (view_mode == VIEW_FPS) {
                             SDL_RenderTexture(renderer, sprite_to_draw, &source, &dest);
@@ -1323,16 +1230,48 @@ void render(void) {
 
             sprite_proj_destroy_all();
         }
-
-        //draw_rect_a((WINDOW_WIDTH / 2) - (FLASH_WIDTH / 2), (WINDOW_HEIGHT / 2) - (FLASH_WIDTH / 2), FLASH_WIDTH, FLASH_WIDTH, 0, 0, 255, 25);
     }
 
     if (view_mode == VIEW_GRID) { // Grid rendering
         // Grid box fill
         for (int row = 0; row < GRID_HEIGHT; row++) {
             for (int col = 0; col < GRID_WIDTH; col++) {
-                g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING,
-                get_map(col, row) ? grid_fill_solid : grid_fill_nonsolid);
+                Uint8 space = get_map(col, row);
+                switch (space) {
+                    case MAP_EMPTY:
+                    case MAP_SOLID:
+                        g_draw_rect_rgb(
+                            col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING,
+                            space == MAP_EMPTY ? grid_fill_nonsolid : grid_fill_solid
+                        );
+                        break;
+                    case MAP_HORIZ_DOOR:
+                        //g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GID)
+                        break;
+                }
+                switch (space) {
+                    case MAP_EMPTY:
+                    case MAP_HORIZ_DOOR:
+                        g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING, grid_fill_nonsolid);
+                        if (space == MAP_HORIZ_DOOR) {
+                            door_info *door = get_door(col, row);
+                            float progress;
+                            if (door) {
+                                progress = door->progress;
+                            } else {
+                                progress = GRID_SPACING;
+                            }
+
+                            g_draw_rect_rgb(
+                                col * GRID_SPACING, (row * GRID_SPACING) + (GRID_SPACING / 2) - (GRID_DOOR_THICKNESS / 2),
+                                progress, GRID_DOOR_THICKNESS, grid_fill_solid
+                            );
+                        }
+                        break;
+                    case MAP_SOLID:
+                        g_draw_rect_rgb(col * GRID_SPACING, row * GRID_SPACING, GRID_SPACING, GRID_SPACING, grid_fill_solid);
+                        break;
+                }
             }
         }
 
@@ -1377,11 +1316,11 @@ void render(void) {
         g_draw_scale_point_rgb(
             player_x + cosf(player_angle) * grid_player_pointer_dist,
             player_y + sinf(player_angle) * grid_player_pointer_dist,
-            player_radius * perc(grid_player_pointer_radius_offset),
+            player_radius / 2.0f,
             grid_player_fill
         );
         // Player
-        g_draw_scale_point_rgb(i_player_x, i_player_y, player_radius, grid_player_fill);
+        g_draw_scale_point_rgb(player_x, player_y, player_radius, grid_player_fill);
 
         // Temporary debug grid points
         for (size_t i = 0; i < num_temp_dgps; i++) {
@@ -1436,7 +1375,7 @@ void render(void) {
     }
 
     // FPS readout
-    if (view_mode != VIEW_TERMINAL) {
+    if (show_fps && view_mode != VIEW_TERMINAL) {
         #define FPS_READOUT_SIZE 5
         draw_rect_a(0, 0, WINDOW_WIDTH / 2, FPS_READOUT_SIZE * BF_CHAR_WIDTH, 0, 0, 0, 127);
         char *fps_text;

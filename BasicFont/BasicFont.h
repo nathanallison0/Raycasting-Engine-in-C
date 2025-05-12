@@ -6,7 +6,7 @@
 #define BF_CHAR_WIDTH 5
 #define BF_CHAR_HEIGHT 5
 
-const int BF_CHARS[BF_NUM_CHARS][BF_CHAR_HEIGHT][BF_CHAR_WIDTH] = {
+const static int BF_CHARS[BF_NUM_CHARS][BF_CHAR_HEIGHT][BF_CHAR_WIDTH] = {
     { // A
         {0,1,1,1,0},
         {1,0,0,0,1},

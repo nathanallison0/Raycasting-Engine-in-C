@@ -65,9 +65,7 @@ int SST_AddState(float player_x, float player_y, float player_rot) {
             printf("SST_AddState: binary state file could not be appended to\n");
             success = 0;
         }
-    }
-
-    else return 0;
+    } else return 0;
 
     fclose(f);
 
