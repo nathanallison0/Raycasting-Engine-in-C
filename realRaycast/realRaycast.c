@@ -104,9 +104,10 @@ int grid_mobj_radius = 7;
 float fp_scale = 1 / 0.009417f;
 #define FP_RENDER_DISTANCE 2000
 #define FP_BRIGHTNESS 0.9f
+float player_height = GRID_SPACING / 2;
 
 float fp_brightness_appl;
-int fp_floor_render_height;
+float fp_floor_render_height;
 char fp_show_walls = TRUE;
 int pixel_fov_circumfrence;
 float radians_per_pixel;
@@ -246,6 +247,10 @@ float fp_dist(float x, float y, float angle_to) {
     }
 
     return point_dist(x, y, player_x, player_y) * cosf(offset);
+}
+
+float col_height_offset(float height) {
+    return (height / 2) - ((player_height / GRID_SPACING) * height);
 }
 
 //             0     1     2     3     4     5     6     7     8            9            10           11
@@ -474,7 +479,7 @@ xy raycast(float x, float y, float angle, int *texture_index, int *texture_col, 
     }
 }
 
-int project(float distance) {
+float project(float distance) {
     return WINDOW_HEIGHT / (distance / fp_scale);
 }
 
@@ -503,42 +508,6 @@ rgb shade_rgb(rgb color, float distance) {
         shade(color.g, distance),
         shade(color.b, distance)
     };
-}
-
-float *floor_side_dist_list = NULL;
-int floor_side_dist_len = 0;
-void draw_floor_texture_bit(float ray_angle, float rel_ray_angle, int x, int y) {
-    // If we have not already calculated projected distance to this y position, calculate
-    // and store in list
-    float side_dist_to_point;
-    if (y == floor_side_dist_len) {
-        // Player height reference
-        side_dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (y/*  + ((float) height / 2) */))) * fp_scale;
-
-        //if (height == FLOOR_RES) {
-            floor_side_dist_list = realloc(floor_side_dist_list, ++floor_side_dist_len * sizeof(float));
-            floor_side_dist_list[y] = side_dist_to_point;
-        //}
-    } else {
-        side_dist_to_point = floor_side_dist_list[y];
-    }
-
-    float straight_dist_to_point = side_dist_to_point / cosf(rel_ray_angle);
-    
-    // Get coordinates of texture point in world space
-    float point_x = (cosf(ray_angle) * straight_dist_to_point) + player_x;
-    float point_y = (sinf(ray_angle) * straight_dist_to_point) + player_y;
-
-    // Find texture coordinates
-    int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
-    int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
-
-    // Shade color
-    rgb shaded_color = shade_rgb(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], side_dist_to_point);
-
-    // Draw on floor and ceiling
-    draw_rect_rgb(x, y, 1, 1/* height */, shaded_color);
-    draw_rect_rgb(x, WINDOW_HEIGHT - y/*  - height */, 1, 1/* height */, shaded_color);
 }
 
 float get_mobj_angle(float x, float y) {
@@ -682,7 +651,7 @@ void setup(void) {
 
     pixel_fov_circumfrence = (WINDOW_WIDTH / fov) * (M_PI * 2);
     radians_per_pixel = fov / WINDOW_WIDTH;
-    fp_floor_render_height = ceilf((WINDOW_HEIGHT - project(FP_RENDER_DISTANCE)) / 2.0f);
+    fp_floor_render_height = (WINDOW_HEIGHT - project(FP_RENDER_DISTANCE)) / 2;
     rot_sprite_incr = ((M_PI * 2) / NUM_ROT_SPRITE_FRAMES);
 
     precompute_shading_table();
@@ -805,6 +774,12 @@ void process_input(void) {
             if (state[SDL_SCANCODE_S]) vertical_input--;
             if (state[SDL_SCANCODE_A]) horizontal_input--;
             if (state[SDL_SCANCODE_D]) horizontal_input++;
+
+            if (state[SDL_SCANCODE_UP]) player_height++;
+            if (state[SDL_SCANCODE_DOWN]) player_height--;
+
+            if (player_height < 0) player_height = 0;
+            else if (player_height > GRID_SPACING) player_height = GRID_SPACING;
             
             // Door opening and closing
             if (key_just_pressed(KEY_OPEN_DOOR)) {
@@ -1062,12 +1037,19 @@ void render(void) {
         float ray_dists[WINDOW_WIDTH];
 
         // Raycast, draw walls, draw floors
+        #define CAPTURES 10
+        float floor_dists[CAPTURES];
+        float ceil_dists[CAPTURES];
         for (int ray_i = 0; ray_i < WINDOW_WIDTH; ray_i++) {
             // Calculate ray angle
             float relative_ray_angle = (radians_per_pixel * ray_i) - (fov / 2);
             float ray_angle = player_angle + relative_ray_angle; 
             if (ray_angle < 0) ray_angle += M_PI * 2;
             else if (ray_angle >= M_PI * 2) ray_angle -= M_PI * 2;
+
+            float rel_cos = cosf(relative_ray_angle);
+            float angle_cos = cosf(ray_angle);
+            float angle_sin = sinf(ray_angle);
 
             int texture_index, texture_x;
             xy hit = raycast(player_x, player_y, ray_angle, &texture_index, &texture_x, NULL);
@@ -1077,81 +1059,82 @@ void render(void) {
                 ray_dists[ray_i] = fp_dist(hit.x, hit.y, ray_angle);
 
                 if (view_mode == VIEW_FPS && fp_show_walls) {
-                    int wall_height = project(ray_dists[ray_i]);
+                    float wall_height = project(ray_dists[ray_i]);
+                    float height_offset = col_height_offset(wall_height);
 
-                    // Draw texture column
+                    // Draw texture column offset based on player height
                     char is_wall_visible = ray_dists[ray_i] <= FP_RENDER_DISTANCE;
+                    float start_wall = ((WINDOW_HEIGHT - wall_height) / 2.0f) - height_offset;
 
                     if (is_wall_visible) {
-                        float texture_row_height = (float) wall_height / TEXTURE_WIDTH;
-                        
-                        float row_y = (WINDOW_HEIGHT - wall_height) / 2.0f;
+                        float texture_row_height = wall_height / TEXTURE_WIDTH;
+
+                        float row_y = start_wall;
                         for (int texture_y = 0; texture_y < TEXTURE_WIDTH; texture_y++) {
                             rgb original_color = textures[texture_index][texture_y][texture_x];
-                            draw_rect_rgb(ray_i, row_y, 1, texture_row_height, shade_rgb(original_color, ray_dists[ray_i]));
+                            draw_col_rgb(ray_i, row_y, texture_row_height, shade_rgb(original_color, ray_dists[ray_i]));
                             row_y += texture_row_height;
                         }
                     }
+                    
+                    // Draw ceiling and floor
+                    // Iterate enough to draw the entire ceiling or floor side, whichever is taller
+                    int end_ceiling = roundf(start_wall);
+                    int end_floor = roundf(WINDOW_HEIGHT - (start_wall + wall_height));
+                    int end_draw = end_floor > end_ceiling ? end_floor : end_ceiling;
 
-                    // Draw floor and ceiling tile pixels below wall
-                    int end_floor;
-                    int end_floor_wall = ceilf(((float) WINDOW_HEIGHT - wall_height) / 2);
-                    if (is_wall_visible) {
-                        end_floor = end_floor_wall;
-                    } else {
-                        end_floor = fp_floor_render_height;
-                    }
+                    float pixel_y_worldspace = 0;
+                    for (int pixel_y = 0; pixel_y < end_draw; pixel_y++) {
+                        float y_factor = (GRID_SPACING / 2) - pixel_y_worldspace;
 
-                    for (int pixel_y = 0; pixel_y < end_floor; pixel_y++) {
-                        // Remove height if drawing up to the wall slice or end of visibility
-                        //int row_height = pixel_y + FLOOR_RES > end_floor ? end_floor - pixel_y : FLOOR_RES;
-                        
-                        //draw_floor_texture_bit(ray_angle, relative_ray_angle, ray_i, pixel_y);
+                        if (pixel_y < end_ceiling) {
+                            float side_dist = ((GRID_SPACING - player_height) / y_factor) * fp_scale;
 
-                        // If we have not already calculated projected distance to this y position, calculate
-                        // and store in list
-                        float side_dist_to_point;
-                        if (pixel_y == floor_side_dist_len) {
-                            // Player height reference
-                            side_dist_to_point = ((float) (WINDOW_HEIGHT / 2) / ((WINDOW_HEIGHT / 2) - (pixel_y/*  + ((float) height / 2) */))) * fp_scale;
+                            float straight_dist = side_dist / rel_cos;
 
-                            //if (height == FLOOR_RES) {
-                                floor_side_dist_list = realloc(floor_side_dist_list, ++floor_side_dist_len * sizeof(float));
-                                floor_side_dist_list[pixel_y] = side_dist_to_point;
-                            //}
-                        } else {
-                            side_dist_to_point = floor_side_dist_list[pixel_y];
+                            float point_x = (angle_cos * straight_dist) + player_x;
+                            float point_y = (angle_sin * straight_dist) + player_y;
+
+                            int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                            int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+
+                            rgb color = shade_rgb(textures[TEXTURE_CEILING_INDEX][texture_y][texture_x], side_dist);
+                            set_pixel_rgb(ray_i, pixel_y, color);
+
+                            if (ray_i == 0 && pixel_y < CAPTURES) {
+                                floor_dists[pixel_y] = side_dist;
+                            }
                         }
 
-                        float straight_dist_to_point = side_dist_to_point / cosf(relative_ray_angle);
-                        
-                        // Get coordinates of texture point in world space
-                        float point_x = (cosf(ray_angle) * straight_dist_to_point) + player_x;
-                        float point_y = (sinf(ray_angle) * straight_dist_to_point) + player_y;
+                        if (pixel_y < end_floor) {
+                            float side_dist = (player_height / y_factor) * fp_scale;
 
-                        // Find texture coordinates
-                        int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
-                        int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                            float straight_dist = side_dist / rel_cos;
+                            
+                            float point_x = (angle_cos * straight_dist) + player_x;
+                            float point_y = (angle_sin * straight_dist) + player_y;
+                            
+                            int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                            int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                            
+                            rgb color = shade_rgb(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], side_dist);
+                            set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, color);
 
-                        // Shade color
-                        rgb shaded_color = shade_rgb(textures[TEXTURE_FLOOR_INDEX][texture_y][texture_x], side_dist_to_point);
+                            if (pixel_y < CAPTURES) {
+                                ceil_dists[pixel_y] = side_dist;
+                            }
+                        }
 
-                        // Draw on floor and ceiling
-                        //draw_rect_rgb(ray_i, pixel_y, 1, 1/* height */, shaded_color);
-                        //draw_rect_rgb(ray_i, WINDOW_HEIGHT - pixel_y/*  - height */, 1, 1/* height */, shaded_color);
-
-                        set_pixel_rgb(ray_i, pixel_y, shaded_color);
-                        set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, shaded_color);
+                        pixel_y_worldspace += (float) GRID_SPACING / WINDOW_HEIGHT;
                     }
                 }
             }
         }
 
-        // Free up list of calculated floor point projection distances
-        if (floor_side_dist_len != 0) {
-            free(floor_side_dist_list); floor_side_dist_list = NULL;
-            floor_side_dist_len = 0;
+        for (int i = 0; i < CAPTURES; i++) {
+            printf("#%d: floor=%f ceil=%f\n", i, floor_dists[i], ceil_dists[i]);
         }
+        puts("end");
 
         if (!grid_casting) {
             present_array_window();
@@ -1210,7 +1193,7 @@ void render(void) {
                 skipped = start_x - skipped;
                 
                 // Draw columns to scale the sprite by distance
-                SDL_FRect dest = {start_x, (WINDOW_HEIGHT / 2) - (sprite_height / 2), 1, sprite_height};
+                SDL_FRect dest = {start_x, (WINDOW_HEIGHT / 2) - (sprite_height / 2) - col_height_offset(sprite_height), 1, sprite_height};
                 float texture_incr = (float) image_width / sprite_width;
                 float texture_col = skipped * texture_incr;
                 SDL_FRect source = {0, 0, ceilf(texture_incr), image_height};
