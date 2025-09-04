@@ -6,7 +6,7 @@
 #define WINDOW_WIDTH (16 * WINDOW_SCALE)
 #define WINDOW_HEIGHT (9 * WINDOW_SCALE)
 
-#define FPS 30
+#define FPS 60
 #define FRAME_TARGET_TIME (1000 / FPS)
 
 #define GRID_SPACING 64

@@ -3,5 +3,4 @@
 !*.*
 *.sh
 .vscode/
-sprites/
-imageTest/
+*/.DS_Store

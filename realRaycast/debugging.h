@@ -37,7 +37,7 @@ char str_num(char *str, float *dest);
 // Varlabels
 typedef struct {
     char *label;
-    char *value;
+    Uint8 *value;
 } char_varlabel;
 
 typedef struct {
@@ -45,7 +45,7 @@ typedef struct {
     float *value;
 } flt_varlabel;
 
-char show_grid_crosshairs = FALSE;
+Uint8 show_grid_crosshairs = FALSE;
 
 #define CHAR_VLS_LEN 10
 char_varlabel char_vls[CHAR_VLS_LEN] = {
@@ -122,8 +122,8 @@ void CMD_set(int num_args, char **args) {
             // If there is one argument, look for a varlabel with that label and
             // print if found
             if (num_args == 1) {
-                // Print int
-                if (is_char) DT_ConsolePrintf("%s: %d\n", *((char **) varlabel), (int) *((char_varlabel *) varlabel)->value);
+                // Print char
+                if (is_char) DT_ConsolePrintf("%s: %d\n", *((Uint8 **) varlabel), (int) *((char_varlabel *) varlabel)->value);
 
                 // Print float
                 else         DT_ConsolePrintf("%s: %f\n", *((char **) varlabel), *((flt_varlabel *) varlabel)->value);
@@ -137,7 +137,7 @@ void CMD_set(int num_args, char **args) {
                 char result = str_num(args[1], &new_num);
                 
                 if (result) {
-                    if (is_char) *((char_varlabel *) varlabel)->value = (char) new_num;
+                    if (is_char) *((char_varlabel *) varlabel)->value = (Uint8) new_num;
                     else         *((flt_varlabel *)varlabel)->value = new_num;
                 }
                 
@@ -385,7 +385,7 @@ int cond(char* msg) {
     return TRUE;
 }
 
-void toggle(char *var) {
+void toggle(Uint8 *var) {
     if (*var) *var = 0;
     else *var = 1;
 }

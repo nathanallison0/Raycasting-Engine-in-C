@@ -338,7 +338,7 @@ const static int BF_CHARS[BF_NUM_CHARS][BF_CHAR_HEIGHT][BF_CHAR_WIDTH] = {
     }
 };
 
-const char* BF_ALLCHARS = "abcdefghijklmnopqrstuvwxyz0123456789.?!>_:'[]()";
+const char *BF_ALLCHARS = "abcdefghijklmnopqrstuvwxyz0123456789.?!>_:'[]()";
 
 typedef struct {
     char lower;
@@ -386,7 +386,7 @@ size_t BF_char_line_x = 0;
 
 void BF_SetTextPos(int x, int y) { BF_char_line_x = x; BF_char_x = x; BF_char_y = y; }
 
-void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_color_r, unsigned char font_color_g, unsigned char font_color_b, char draw_cursor) {
+void BF_FillText(char *text, int font_size, int wrap_length, unsigned char font_color_r, unsigned char font_color_g, unsigned char font_color_b, char draw_cursor) {
     size_t length = strlen(text);
 
     // Iterate though each character in the text
@@ -436,16 +436,16 @@ void BF_FillText(char* text, int font_size, int wrap_length, unsigned char font_
     }
 }
 
-void BF_FillTextRgb(char* text, int font_size, int wrap_length, rgb font_color, int draw_cursor) {
+void BF_FillTextRgb(char *text, int font_size, int wrap_length, rgb font_color, int draw_cursor) {
     BF_FillText(text, font_size, wrap_length, font_color.r, font_color.g, font_color.b, draw_cursor);
 }
 
-void BF_DrawText(char* text, int x, int y, int font_size, int wrap_length, unsigned char color_r, unsigned char color_g, unsigned char color_b, int show_cursor) {
+void BF_DrawText(char *text, int x, int y, int font_size, int wrap_length, unsigned char color_r, unsigned char color_g, unsigned char color_b, int show_cursor) {
     BF_SetTextPos(x, y);
     BF_FillText(text, font_size, wrap_length, color_r, color_g, color_b, show_cursor);
 }
 
-void BF_DrawTextRgb(char* text, int x, int y, int font_size, int wrap_length, rgb color, int show_cursor) {
+void BF_DrawTextRgb(char *text, int x, int y, int font_size, int wrap_length, rgb color, int show_cursor) {
     BF_DrawText(text, x, y, font_size, wrap_length, color.r, color.g, color.b, show_cursor);
 }
 
@@ -455,7 +455,7 @@ typedef struct {
     int alloc;
 } alstring;
 
-alstring* alstring_init(int alloc) {
+alstring *alstring_init(int alloc) {
     alstring* s = (alstring *) malloc(sizeof(*s));
     s->text = malloc(sizeof(char) * alloc);
     s->len = 1;
@@ -463,7 +463,7 @@ alstring* alstring_init(int alloc) {
     return s;
 }
 
-void alstring_append(alstring* str, char c) {
+void alstring_append(alstring *str, char c) {
     if (str->len % str->alloc == 0) {
         str->text = realloc(str->text, sizeof(char) * (str->len + str->alloc));
         //printf("allocated %zu\n", str->len + str->alloc);
@@ -473,7 +473,7 @@ void alstring_append(alstring* str, char c) {
     str->text[str->len - 1] = '\0';
 }
 
-void alstring_pop(alstring* str) {
+void alstring_pop(alstring *str) {
     if (str->len > 1) {
         if (--str->len % str->alloc == 0) {
             str->text = realloc(str->text, sizeof(char) * str->len);
@@ -483,13 +483,13 @@ void alstring_pop(alstring* str) {
     }
 }
 
-void alstring_clear(alstring* str) {
+void alstring_clear(alstring *str) {
     str->text = realloc(str->text, sizeof(char));
     str->text[0] = '\0';
     str->len = 1;
 }
 
-void alstring_destroy(alstring* str) {
+void alstring_destroy(alstring *str) {
     free(str->text);
     free(str);
 }
