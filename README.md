@@ -9,11 +9,11 @@ Debugging features include a terminal that can be used to make save-states and c
 - A top-down view where the camera can move independently from the player
 - A terminal for debugging features, including save states and changing variables
 
-**First person view:**
-![Preview](https://github.com/nathanallison0/Raycasting-Engine-in-C/blob/main/media/FPV.gif?raw=true)
+**First person view:**\
+<video controls src="media/fpv.mov" title="First person view"></video>
 \
-**Top-down view:**
-![Preview](https://github.com/nathanallison0/Raycasting-Engine-in-C/blob/main/media/topDown.gif?raw=true)
+**Top-down view:**\
+<video controls src="media/map.mov" title="Top-down view"></video>
 \
 **Terminal:** \
-![Preview](https://github.com/nathanallison0/Raycasting-Engine-in-C/blob/main/media/terminal.gif?raw=true)
+<video controls src="media/terminal.mov" title="Terminal view"></video>
