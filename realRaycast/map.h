@@ -1,5 +1,4 @@
 #include <SDL3/SDL.h>
-#include "constants.h"
 
 // Grid
 #define GRID_WIDTH 25
@@ -8,9 +7,11 @@
 #define get_map(x, y) map[(int) (y)][(int) (x)]
 #define get_map_coords(x, y) get_map((x) / GRID_SPACING, (y) / GRID_SPACING)
 
-#define MAP_EMPTY 0
-#define MAP_SOLID 1
-#define MAP_HORIZ_DOOR 2
+typedef enum {
+    TILE_NONSOLID,
+    TILE_SOLID,
+    TILE_HORIZ_DOOR
+} tile;
 
 static Uint8 map[GRID_HEIGHT][GRID_WIDTH] = {
 //   1 2 3 4 5 6 7 8 9 10111213141516171819202122232425
@@ -162,8 +163,8 @@ Uint8 ceiling_textures[GRID_HEIGHT][GRID_WIDTH] = {
     {5,5,5,5,5,5,5,5,5,5,5,5,5,0,0,0,0,0,0,0,0,0,0,0,0}  // 25
 };
 
-#define DFLAG_MOVING 1
-#define DFLAG_OPENING (1 << 1)
+#define DOORF_MOVING 1
+#define DOORF_OPENING (1 << 1)
 
 typedef struct {
     int x, y;

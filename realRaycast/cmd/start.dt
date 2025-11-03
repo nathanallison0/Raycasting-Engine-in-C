@@ -1,1 +1,2 @@
-state load 0
+set show_mouse_coords true
+set show_fps false

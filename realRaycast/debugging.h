@@ -154,6 +154,9 @@ void CMD_set(int num_args, char **args) {
 }
 
 void CMD_state(int num_args, char **args) {
+    #if __EMSCRIPTEN__
+    DT_ConsolePrintln("Feature unavailable");
+    #else
     float x, y, rot;
 
     // If there are zero arguments, print all states
@@ -220,6 +223,7 @@ void CMD_state(int num_args, char **args) {
         else
             DT_ConsolePrintln("Err expected 'add', 'load', 'remove', or 'clear'");
     }
+    #endif
 }
 
 #define CMD_DIR_NAME "./cmd/"
@@ -227,6 +231,9 @@ DIR *cmd_dir;
 long cmd_dir_start;
 
 void CMD_run(int num_args, char **args) {
+    #if __EMSCRIPTEN__
+    DT_ConsolePrintln("Feature unavailable");
+    #else
     if (num_args != 1) {
         DT_ConsolePrintln("Err expected only name of program to run");
         return;
@@ -264,6 +271,7 @@ void CMD_run(int num_args, char **args) {
     }
 
     DT_ConsolePrintf("Err program '%s' does not exist\n", args[0]);
+    #endif
 }
 
 const DT_Command terminal_commands[] = {
@@ -380,7 +388,7 @@ char str_num(char *str, float *dest) {
     return TRUE;
 }
 
-int cond(char* msg) {
+char cond(char* msg) {
     puts(msg);
     return TRUE;
 }

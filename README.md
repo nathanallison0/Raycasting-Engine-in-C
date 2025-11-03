@@ -1,19 +1,24 @@
 ## Raycasting Engine
 
-Uses SDL2 to simulate a 3D space on a 2D plane. Can be viewed in first-person with sprites and top-down views.
-Debugging features include a terminal that can be used to make save-states and change variables during program execution.
+Uses the graphics library SDL3 with a raycasting algorithm to simulate a 3D space in a 2D plane. A demo of the project can be found [here](https://nathanallison0.github.io).
 
 ## Features:
 - A two-dimensional map that can be traversed by the player in first person
 - Customizable sprites that inhabit the world
 - A top-down view where the camera can move independently from the player
-- A terminal for debugging features, including save states and changing variables
+- Textures for the walls, floor, and ceiling, including a sky texture
+- A terminal for debugging where the user can make save states and change variables during runtime
 
-**First person view:**\
+## Planned features:
+- A dynamic lighting system designed for the grid layout of the project
+- Enemies that target the player and can be defeated
+- An example game made within the engine
+
+**First person view:**
 <img src="media/fpv.png" width="640">
-\
-**Top-down view:**\
+
+**Top-down view:**
 <img src="media/map.png" width="640">
-\
-**Terminal:** \
+
+**Terminal:**
 <img src="media/terminal.png" width="640">
