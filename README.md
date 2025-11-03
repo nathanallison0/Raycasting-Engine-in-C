@@ -14,11 +14,16 @@ Uses the graphics library SDL3 with a raycasting algorithm to simulate a 3D spac
 - Enemies that target the player and can be defeated
 - An example game made within the engine
 
-**First person view:**
+## Main files:
+- [Main project file](realRaycast/realRaycast.c)
+- [Raycasting algorithm](realRaycast/raycasts.h)
+- [Custom terminal creation](DebugTerminal/DebugTerminal.h)
+
+**First person view:**\
 <img src="media/fpv.png" width="640">
 
-**Top-down view:**
+**Top-down view:**\
 <img src="media/map.png" width="640">
 
-**Terminal:**
+**Terminal:**\
 <img src="media/terminal.png" width="640">

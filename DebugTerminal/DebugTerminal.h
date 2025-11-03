@@ -1,34 +1,13 @@
-/*
-DT_Command
-
-The prefix should be the prefix of the terminal command, with no spaces. Prefixes are case sensitive.
-
-Interpreter function format:
-
-The interpreter function should perform the intended actions of the terminal command, using the arguments passed
-to the terminal command (passed to the DT_Command interpreter function through the char** argument).
-
-args:
-    int: the number of arguments passed to the terminal command and, by proxy, the DT_Command interpreter function.
-
-    char**: the arguments passed to the ternimal function. The arguments should be seperated by spaces in the
-    terminal command. Quotation marks "" CANNOT be used to pass arguments containing spaces.
-
-Example:
-    Terminal input: [command] arg1 arg2
-    Arguments are passed to the DT_Command with the prefix [command]:
-    (int) 2, (char **) {"arg1", "arg2"}
-*/
-
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdarg.h>
 
-// Structures
+// prefix should be the prefix of the terminal command, with no spaces.
+// Prefixes are case sensitive.
 typedef struct {
     char* prefix;
-    void (*interpreter)(int, char**);
+    void (*handler)(int, char**);
 } DT_Command;
 
 typedef struct {
@@ -66,6 +45,7 @@ void DT_ConsolePrintf(const char* format, ...) {
     va_start(args, format);
     char* final = NULL;
 
+    // Combine format and arguments
     vasprintf(&final, format, args);
 
     if (final) {
@@ -90,28 +70,26 @@ int DT_InterpretCommand(DT_Interpreter* interpreter, char* text) {
     char command_text[strlen(text) + 1];
     strlcpy(command_text, text, sizeof(command_text));
 
-    // Find first occurrance of a space character
+    // Find first occurrence of a space character
     char* first_space_loc = strchr(command_text, ' ');
 
     // If a space was found, set the found space to a terminating character
-    // so that the text before the space can be checked as a string
+    // so that the text before the space is effectively its own string
     if (first_space_loc) {
         *first_space_loc = '\0';
     }
 
-    // Get the command with the prefix
+    // Get the command with the prefix of the string we just got
     const DT_Command* command = DT_GetCommandByPrefix(interpreter, command_text);
 
     // If a command was matched to the prefix and there was no space,
     // run the command's interpreter function with no arguments
     if (command) {
-        if (!first_space_loc) command->interpreter(0, NULL);
-
-        // If there was a space, get the arguments to the command and run
-        // its interpreter
-        else {
-            // Get arguments as an array of strings
-
+        if (!first_space_loc) {
+            command->handler(0, NULL);
+        } else {
+            // If there was a space, get the arguments to the command by splitting
+            // the original string and run its handler with the arguments
             char* new_space_loc;
             int num_args = 0;
             char** args = NULL;
@@ -119,7 +97,9 @@ int DT_InterpretCommand(DT_Interpreter* interpreter, char* text) {
             while (1) {
                 // If this is the first iteration, set the new space location to the absolute second space
                 // (the space after the space following the prefix)
-                if (num_args == 0) new_space_loc = strchr(first_space_loc + 1, ' ');
+                if (num_args == 0) {
+                    new_space_loc = strchr(first_space_loc + 1, ' ');
+                }
 
                 num_args++;
 
@@ -128,33 +108,36 @@ int DT_InterpretCommand(DT_Interpreter* interpreter, char* text) {
 
                 // If this is the first argument, set its beginning character to the
                 // first character of the first argument
-                if (num_args == 1) args[0] = first_space_loc + 1;
-
-                // Otherwise, set the argument's beginning character to the first character after
-                // the terminating character of the last argument
-                else args[num_args - 1] = *(args + (num_args - 2)) + strlen(args[num_args - 2]) + 1;
+                if (num_args == 1) {
+                    args[0] = first_space_loc + 1;
+                } else {
+                    // Otherwise, set the argument's beginning character to the character following
+                    // the terminating character of the previous argument
+                    args[num_args - 1] = *(args + (num_args - 2)) + strlen(args[num_args - 2]) + 1;
+                }
 
                 // If this is not the last argument (a space was found),
                 // set the found space character to a terminator and look for the next space
                 if (new_space_loc) {
                     *new_space_loc = '\0';
                     new_space_loc = strchr(new_space_loc + 1, ' ');
+                } else {
+                    // Otherwise, stop as we have found all arguments
+                    break;
                 }
-
-                // Otherwise, stop as we have found all arguments
-                else break;
             }
 
             // Interpret the command using the arguments
-            command->interpreter(num_args, args);
+            command->handler(num_args, args);
 
             free(args);
         }
 
         return 1;
-
+    }
+    
     // If no command was found, return unsuccessful
-    } else return 0;
+    return 0;
 }
 
 void DT_CombineArgs(char** cmd_args, int start_arg, int num_args, char sep) {

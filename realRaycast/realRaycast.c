@@ -137,7 +137,7 @@ float player_height = GRID_SPACING / 2;
 
 float fp_brightness_appl;
 Uint8 fp_show_walls = TRUE;
-int pixel_fov_circumfrence;
+int pixel_fov_circumference;
 float radians_per_pixel;
 //#define FLOOR_RES 1
 
@@ -427,9 +427,9 @@ void setup(void) {
     // Initialize keyboard state
     state = SDL_GetKeyboardState(NULL);
 
-    pixel_fov_circumfrence = (WINDOW_WIDTH / fov) * (M_PI * 2);
+    pixel_fov_circumference = (WINDOW_WIDTH / fov) * (M_PI * 2);
     radians_per_pixel = fov / WINDOW_WIDTH;
-    sky_scale_x = (float) array_sprites[0].width / pixel_fov_circumfrence;
+    sky_scale_x = (float) array_sprites[0].width / pixel_fov_circumference;
     sky_scale_y = (float) array_sprites[0].height / (WINDOW_HEIGHT / 2);
 
     precompute_shading_table();
@@ -830,7 +830,7 @@ void render(void) {
             fix_angle(ray_angle);
 
             if (sky_start == -1) {
-                sky_start = ray_angle * (pixel_fov_circumfrence / (M_PI * 2));
+                sky_start = ray_angle * (pixel_fov_circumference / (M_PI * 2));
             }
 
             #if FLOOR_TEXTURES
@@ -925,8 +925,8 @@ void render(void) {
                             // If we are drawing the sky texture
                             if (texture_num == 0) {
                                 int sky_x = sky_start + ray_i;
-                                if (sky_x >= pixel_fov_circumfrence) {
-                                    sky_x -= pixel_fov_circumfrence;
+                                if (sky_x >= pixel_fov_circumference) {
+                                    sky_x -= pixel_fov_circumference;
                                 }
 
                                 rgba color = get_array_sprite(array_sprites[0], (int) (sky_x * sky_scale_x), (int) (pixel_y * sky_scale_y));
@@ -966,8 +966,8 @@ void render(void) {
                             // If we are drawing the sky texture
                             if (texture_num == 0) {
                                 int sky_x = sky_start + ray_i;
-                                if (sky_x >= pixel_fov_circumfrence) {
-                                    sky_x -= pixel_fov_circumfrence;
+                                if (sky_x >= pixel_fov_circumference) {
+                                    sky_x -= pixel_fov_circumference;
                                 }
 
                                 rgba color = get_array_sprite(array_sprites[0], (int) (sky_x * sky_scale_x), (int) (pixel_y * sky_scale_y));
@@ -1033,14 +1033,14 @@ void render(void) {
                 float sprite_width = (proj_height / image->height) * image->world_height_percent * image->width;
 
                 // Don't draw if the sprite is completely offscreen
-                if (center_x > WINDOW_WIDTH + (sprite_width / 2) && center_x < pixel_fov_circumfrence - (sprite_width / 2)) {
+                if (center_x > WINDOW_WIDTH + (sprite_width / 2) && center_x < pixel_fov_circumference - (sprite_width / 2)) {
                     continue;
                 }
 
                 // Calculate bounds and increments for rendering
                 float start_x = center_x - (sprite_width / 2);
-                if (start_x > pixel_fov_circumfrence - sprite_width) {
-                    start_x -= pixel_fov_circumfrence;
+                if (start_x > pixel_fov_circumference - sprite_width) {
+                    start_x -= pixel_fov_circumference;
                 }
 
                 // Limit x to inside of screen
@@ -1194,7 +1194,7 @@ void render(void) {
                 DG_COLORS[temp_dgp_list[i].color_index]);
         }
 
-        // Grid crosshairs
+        // Grid crosshair
         if (show_grid_crosshairs) {
             draw_rect_frgb(WINDOW_WIDTH / 2, 0, 1, WINDOW_HEIGHT, C_WHITE);
             draw_rect_frgb(0, WINDOW_HEIGHT / 2, WINDOW_WIDTH, 1, C_WHITE);
