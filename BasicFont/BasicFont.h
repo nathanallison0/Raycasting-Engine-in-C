@@ -445,7 +445,7 @@ void BF_DrawText(char *text, int x, int y, int font_size, int wrap_length, unsig
     BF_FillText(text, font_size, wrap_length, color_r, color_g, color_b, show_cursor);
 }
 
-void BF_DrawTextRgb(char *text, int x, int y, int font_size, int wrap_length, rgb color, int show_cursor) {
+void BF_DrawTextRgb(char *text, int x, int y, int font_size, int wrap_length, rgb color, char show_cursor) {
     BF_DrawText(text, x, y, font_size, wrap_length, color.r, color.g, color.b, show_cursor);
 }
 

@@ -47,7 +47,7 @@ typedef struct {
 
 Uint8 show_grid_crosshairs = FALSE;
 
-#define CHAR_VLS_LEN 10
+#define CHAR_VLS_LEN 11
 char_varlabel char_vls[CHAR_VLS_LEN] = {
     {"grid show crosshairs", &show_grid_crosshairs},
     {"grid cam follows player", &grid_follow_player},
@@ -58,15 +58,18 @@ char_varlabel char_vls[CHAR_VLS_LEN] = {
     {"show mouse coords",  &show_mouse_coords},
     {"grid casting",  &grid_casting},
     {"debug prr",  &debug_prr},
-    {"show fps", &show_fps}
+    {"show fps", &show_fps},
+    {"cap fps", &cap_fps}
 };
 
-#define FLT_VLS_LEN 4
+#define FLT_VLS_LEN 6
 flt_varlabel flt_vls[FLT_VLS_LEN] = {
     {"player x", &player_x},
     {"player y", &player_y},
+    {"player z", &player_height},
     {"player angle", &player_angle},
-    {"zoom", &fp_scale}
+    {"zoom", &fp_scale},
+    {"sensitivity", &player_sensitivity}
 };
 
 // Terminal
@@ -77,12 +80,12 @@ char* TERMINAL_PROMPT = " > ";
 alstring *terminal_input;
 DT_Interpreter *terminal;
 
-void CMD_echo(int num_args, char **args) {
+static void CMD_echo(int num_args, char **args) {
     DT_CombineArgs(args, 0, num_args, ' ');
     DT_ConsolePrintln(args[0]);
 }
 
-void CMD_set(int num_args, char **args) {
+static void CMD_set(int num_args, char **args) {
     // If there are zero arguments, print all the variables
     if (num_args == 0) {
         for (int i = 0; i < CHAR_VLS_LEN; i++) {
@@ -127,10 +130,9 @@ void CMD_set(int num_args, char **args) {
 
                 // Print float
                 else         DT_ConsolePrintf("%s: %f\n", *((char **) varlabel), *((flt_varlabel *) varlabel)->value);
-            }
+            } else if (num_args == 2) {
+                // If there are two arguments, try to set the variable using the second argument
 
-            // If there are two arguments, try to set the variable using the second argument
-            else if (num_args == 2) {
                 // Get second argument as a number
                 // If second argument is valid, set it to the varlabel value
                 float new_num;
@@ -139,21 +141,21 @@ void CMD_set(int num_args, char **args) {
                 if (result) {
                     if (is_char) *((char_varlabel *) varlabel)->value = (Uint8) new_num;
                     else         *((flt_varlabel *)varlabel)->value = new_num;
-                }
-                
-                else
+                } else {
                     DT_ConsolePrintf("Err cannot interpret '%s' as a number\n", args[1]);
+                }
             }
         } else {
-            if (num_args > 2)
+            if (num_args > 2) {
                 DT_ConsolePrintln("Err expected from 0 to 2 arguments");
-            else
+            } else {
                 DT_ConsolePrintf("Err no such variable '%s'\n", args[0]);
+            }
         }
     }
 }
 
-void CMD_state(int num_args, char **args) {
+static void CMD_state(int num_args, char **args) {
     #if __EMSCRIPTEN__
     DT_ConsolePrintln("Feature unavailable");
     #else
@@ -162,17 +164,15 @@ void CMD_state(int num_args, char **args) {
     // If there are zero arguments, print all states
     if (num_args == 0) {
         int i = 0;
-        while (SST_LoadState(i, &x, &y, &rot))
+        while (SST_LoadState(i, &x, &y, &rot)) {
             DT_ConsolePrintf("%*d %f %f %f\n", 2, i++, x, y, rad_deg(rot));
-    }
-
-    else {
+        }
+    } else {
         // Saving a state
         if (strcmp(args[0], "add") == 0) {
-            if (num_args == 1)
+            if (num_args == 1) {
                 SST_AddState(player_x, player_y, player_angle);
-            
-            else if (num_args == 4) {
+            } else if (num_args == 4) {
                 float nums[3];
                 int i = -1;
                 while (++i < 3) {
@@ -182,18 +182,20 @@ void CMD_state(int num_args, char **args) {
                     }
                 }
                 SST_AddState(nums[0], nums[1], deg_rad(nums[2]));
-            } else
+            } else {
                 DT_ConsolePrintln("Err expected 'add' [x y rot]");
+            }
         }
 
         // Loading a state
         else if (strcmp(args[0], "load") == 0) {
             if (num_args == 2) {
                 float num;
-                if (str_num(args[1], &num))
+                if (str_num(args[1], &num)) {
                     SST_LoadState(num, &player_x, &player_y, &player_angle);
-                else
+                } else {
                     DT_ConsolePrintf("Err cannot interpret '%s' as a number\n", args[1]);
+                }
             } else {
                 DT_ConsolePrintln("Err expected 'load' and the number of the state to load");
             }
@@ -203,34 +205,32 @@ void CMD_state(int num_args, char **args) {
         else if (strcmp(args[0], "remove") == 0) {
             if (num_args == 2) {
                 float num;
-                if (str_num(args[1], &num))
+                if (str_num(args[1], &num)) {
                     SST_RemoveState(num);
-                else
+                } else {
                     DT_ConsolePrintf("Err cannot interpret '%s' as a number\n", args[1]);
-            }
-            else
+                }
+            } else {
                 DT_ConsolePrintln("Err expected 'remove' and the number of the state to remove");
-        }
-
-        // Clearing all states
-        else if (strcmp(args[0], "clear") == 0) {
-            if (num_args == 1)
+            }
+        } else if (strcmp(args[0], "clear") == 0) {
+            // Clearing all states
+            if (num_args == 1) {
                 SST_ClearStates();
-            else
+            } else {
                 DT_ConsolePrintln("Err expected 'clear' and no other arguments");
-        }
-        
-        else
+            }
+        } else {
             DT_ConsolePrintln("Err expected 'add', 'load', 'remove', or 'clear'");
+        }
     }
     #endif
 }
 
 #define CMD_DIR_NAME "./cmd/"
-DIR *cmd_dir;
-long cmd_dir_start;
+static DIR *cmd_dir;
 
-void CMD_run(int num_args, char **args) {
+static void CMD_run(int num_args, char **args) {
     #if __EMSCRIPTEN__
     DT_ConsolePrintln("Feature unavailable");
     #else
@@ -245,8 +245,9 @@ void CMD_run(int num_args, char **args) {
     struct dirent *entry;
     while ((entry = readdir(cmd_dir))) {
         // Skip . and ..
-        if (entry->d_name[0] == '.')
+        if (entry->d_name[0] == '.') {
             continue;
+        }
 
         // If name matches, execute each line of the file
         if (strcmp(entry->d_name, args[0]) == 0) {
@@ -259,8 +260,9 @@ void CMD_run(int num_args, char **args) {
             char *newline;
             while (fgets(line, 51, f)) {
                 // Remove newline
-                if ((newline = strchr(line, '\n')))
+                if ((newline = strchr(line, '\n'))) {
                     *newline = '\0';
+                }
 
                 // Execute line
                 DT_InterpretCommand(terminal, line);
@@ -274,7 +276,7 @@ void CMD_run(int num_args, char **args) {
     #endif
 }
 
-const DT_Command terminal_commands[] = {
+static const DT_Command terminal_commands[] = {
     {"echo", *CMD_echo},
     {"set", *CMD_set},
     {"state", *CMD_state},
@@ -282,7 +284,7 @@ const DT_Command terminal_commands[] = {
 };
 
 // DGs
-const rgb DG_COLORS[] = {
+static const rgb DG_COLORS[] = {
     C_WHITE,
     C_YELLOW,
     C_RED,
@@ -293,19 +295,19 @@ const rgb DG_COLORS[] = {
 };
 
 enum dg_color_index {
-    DG_WHITE = 0,
-    DG_YELLOW = 1,
-    DG_RED = 2,
-    DG_BLUE = 3,
-    DG_PURPLE = 4,
-    DG_GREEN = 5,
-    DG_BLACK = 6
+    DG_WHITE,
+    DG_YELLOW,
+    DG_RED,
+    DG_BLUE,
+    DG_PURPLE,
+    DG_GREEN,
+    DG_BLACK
 };
 
-int dgp_radius = 5;
-int num_fill_dgps = 0;
-int max_fill_dgps = FPS / 2;
-size_t num_temp_dgps = 0;
+static int dgp_radius = 5;
+static int num_fill_dgps = 0;
+static int max_fill_dgps = FPS / 2;
+static size_t num_temp_dgps = 0;
 struct fill_dgp *fill_dgp_head;
 struct fill_dgp *fill_dgp_tail;
 struct temp_dgp *temp_dgp_list = NULL;
@@ -359,8 +361,9 @@ void add_dgl(int x1, int y1, int x2, int y2, byte color_index) {
 
 void underscore_space(char *str) {
     char *index;
-    while ((index = strchr(str, '_')))
+    while ((index = strchr(str, '_'))) {
         *index = ' ';
+    }
 }
 
 // Convert from string to number
@@ -394,11 +397,10 @@ char cond(char* msg) {
 }
 
 void toggle(Uint8 *var) {
-    if (*var) *var = 0;
-    else *var = 1;
+    *var = !*var;
 }
 
-void debugging_start(void) {
+void init_debugging(void) {
     terminal = DT_CreateInterpreter(terminal_commands, sizeof(terminal_commands) / sizeof(DT_Command));
 
     // Terminal input init
@@ -411,10 +413,11 @@ void debugging_start(void) {
     cmd_dir = opendir(CMD_DIR_NAME);
 
     char *start_file = "start.dt";
-    if (cmd_dir)
+    if (cmd_dir) {
         CMD_run(1, &start_file);
-    else
+    } else {
         printf("Could not open command directory\n");
+    }
 }
 
 void debugging_end(void) {

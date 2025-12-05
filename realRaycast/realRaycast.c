@@ -1,6 +1,7 @@
 #include <math.h>
 #include <string.h>
 #include <dirent.h>
+#include <SDL3_mixer/SDL_mixer.h>
 
 // Web integration
 #if __EMSCRIPTEN__
@@ -22,11 +23,21 @@
 #define FPS 60
 #define FRAME_TARGET_TIME (1000 / FPS)
 
+#define APPLY_BLUR FALSE
+#define ANTI_ALIASING_LEVEL 4
+
 #define GRID_SPACING 64
+#define WORLDSPACE ((float) GRID_SPACING / WINDOW_HEIGHT)
+
+#define assert(x) if (!(x)) { printf("assertion error on line %d - " #x ": '%s'\n", __LINE__, SDL_GetError()); exit(1); }
 
 // Custom SDL graphics functions
 // draw_rect(), etc.
 #include "../../SDL/SDL3Start.h"
+
+#define free(x) SDL_free(x)
+#define malloc(x) SDL_malloc(x)
+#define realloc(x, y) SDL_realloc(x, y)
 
 // Font
 #include "../BasicFont/BasicFont.h"
@@ -50,18 +61,50 @@
 #define fix_angle(angle) { if (angle < 0) angle += M_PI * 2; else if (angle >= M_PI * 2) angle -= M_PI * 2; }
 
 // View modes
-typedef enum {
+enum {
     VIEW_GRID,
     VIEW_FPS,
     VIEW_TERMINAL
-} view_mode;
+};
+typedef Uint8 view_mode;
 
 view_mode view = VIEW_FPS;
 view_mode prev_view;
 
-void set_view(view_mode new) {
-    prev_view = view;
-    view = new;
+void focus_mouse(void) {
+    SDL_SetWindowRelativeMouseMode(window, true);
+}
+
+void unfocus_mouse(void) {
+    SDL_SetWindowRelativeMouseMode(window, false);
+}
+
+bool mouse_focused(void) {
+    return SDL_GetWindowRelativeMouseMode(window);
+}
+
+void enter_fps_view(void) {
+    view = VIEW_FPS;
+    focus_mouse();
+}
+
+void enter_grid_view(void) {
+    view = VIEW_GRID;
+    unfocus_mouse();
+}
+
+void toggle_terminal_view(void) {
+    if (view == VIEW_TERMINAL) {
+        if (prev_view == VIEW_FPS) {
+            enter_fps_view();
+        } else {
+            enter_grid_view();
+        }
+    } else {
+        prev_view = view;
+        view = VIEW_TERMINAL;
+        unfocus_mouse();
+    }
 }
 
 typedef struct {
@@ -77,6 +120,8 @@ Uint8 show_fps = FALSE;
 Uint8 show_fps = TRUE;
 #endif
 
+Uint32 frames = 0;
+Uint8 cap_fps = TRUE;
 // Grid visual
 rgb grid_bg = {255, 0, 255};
 rgb grid_fill_nonsolid = {235, 235, 235};
@@ -111,8 +156,8 @@ float player_angle;
 float fov = M_PI / 3;
 int player_movement_accel = 600;
 int player_movement_decel = 600;
-float player_angle_increment = M_PI / 18;
-int player_rotation_speed = 8;
+float player_rotation_speed = 4 * (M_PI / 9);
+float player_sensitivity = 0.05f;
 
 // Player interactions
 #define KEY_OPEN_DOOR SDL_SCANCODE_E
@@ -133,7 +178,7 @@ int grid_mobj_radius = 7;
 float fp_scale = 1 / 0.009417f;
 #define FP_RENDER_DISTANCE 2000
 #define FP_BRIGHTNESS 0.9f
-float player_height = GRID_SPACING / 2;
+float player_height;
 
 float fp_brightness_appl;
 Uint8 fp_show_walls = TRUE;
@@ -144,10 +189,10 @@ float radians_per_pixel;
 // User Input Variables
 int shift = FALSE;
 int left_mouse_down = FALSE;
-int mouse_x;
-int mouse_y;
-int prev_mouse_x = -1;
-int prev_mouse_y = -1;
+float mouse_x;
+float mouse_y;
+float prev_mouse_x = -1;
+float prev_mouse_y = -1;
 char horizontal_input;
 char vertical_input;
 char rotation_input = 0;
@@ -155,7 +200,7 @@ char rotation_input = 0;
 xy light = {983, 345};
 
 rgb grid_mobj_color = C_BLUE;
-__linked_list_all_add__(mobj,
+/* __linked_list_all_add__(mobj,
     float x; float y; int sprite_num,
     (float x, float y, int sprite_num),
         item->x = x;
@@ -172,7 +217,12 @@ __linked_list_all_add__(rot_mobj,
         item->y = y;
         item->angle = angle;
         item->sprite_num = sprite_num;
-)
+) */
+
+#include "mobj.h"
+
+#define NUM_ROT_SPRITE_FRAMES 8
+
 
 #define SHOT_SPRITE_COUNT 20
 #define KEY_SHOT SDL_SCANCODE_SPACE
@@ -194,9 +244,10 @@ __linked_list_all_add__(shot,
 )
 
 __linked_list_all__(sprite_proj,
-    float dist; float angle; int sprite_num,
-    (float dist, float angle, int sprite_num),
+    float dist; float z; float angle; int sprite_num,
+    (float dist, float z, float angle, int sprite_num),
         item->dist = dist;
+        item->z = z;
         item->angle = angle;
         item->sprite_num = sprite_num
 )
@@ -282,8 +333,11 @@ void precompute_shading_table(void) {
         float dist = ((float) i / SHADE_DIST) * FP_RENDER_DISTANCE;
         for (int c = 0; c < 256; c++) {
             float shaded = (c - ((float) c / FP_RENDER_DISTANCE) * dist) * FP_BRIGHTNESS;
-            if (shaded < 0) shaded = 0;
-            else if (shaded > 255) shaded = 255;
+            if (shaded < 0) {
+                shaded = 0;
+            } else if (shaded > 255) {
+                shaded = 255;
+            }
             shading_table[i][c] = (Uint8) shaded;
         }
     }
@@ -323,14 +377,15 @@ float get_angle_from_player(float x, float y) {
 
 #include "raycasts.h"
 
-void add_sprite_proj_angle(float x, float y, float angle, int sprite_num) {
-    float distance = fp_dist(x, y, angle);
+void add_sprite_proj(float x, float y, float z, int sprite_num) {
+    float angle_to = get_angle_from_player(x, y);
+    float distance = fp_dist(x, y, angle_to);
     if (distance > FP_RENDER_DISTANCE) {
         return;
     }
 
     // Store, sorted farthest to closest, for rendering
-    sprite_proj *new_proj = sprite_proj_create(distance, angle, sprite_num);
+    sprite_proj *new_proj = sprite_proj_create(distance, z, angle_to, sprite_num);
     
     if (sprite_proj_head) {
         if (sprite_proj_head->dist < distance) {
@@ -351,9 +406,8 @@ void add_sprite_proj_angle(float x, float y, float angle, int sprite_num) {
     }
 }
 
-void add_sprite_proj(float x, float y, int sprite_num) {
-    float angle_to = get_angle_from_player(x, y);
-    add_sprite_proj_angle(x, y, angle_to, sprite_num);
+void add_sprite_proj_mobj(mobj *o) {
+    add_sprite_proj(o->x, o->y, o->z, o->sprite_index);
 }
 
 void calc_grid_cam_center(void) {
@@ -371,7 +425,7 @@ void reset_grid_cam(void) {
 void reset_player(void) {
     player_x = GRID_SPACING * 4;
     player_y = GRID_SPACING * 4;
-    player_height = GRID_SPACING / 2;
+    player_height = 40;
     player_x_velocity = 0;
     player_y_velocity = 0;
     player_angle = 0;
@@ -422,10 +476,21 @@ void push_player_right(float force) {
     }
 }
 
+#include "sounds.h"
+
 const bool *state;
 void setup(void) {
+    init_sound();
+    //SDL_SetHint(SDL_HINT_MOUSE_RELATIVE_WARP_MOTION, "1");
+
     // Initialize keyboard state
     state = SDL_GetKeyboardState(NULL);
+
+    sound_effect = MIX_LoadAudio(
+        audio_mixer,
+        "/Users/nallison/Documents/sfx/raycasting/Final spring flick edit 1b CLEAN FINAL2Mono.wav",
+        false
+    ); assert(sound_effect);
 
     pixel_fov_circumference = (WINDOW_WIDTH / fov) * (M_PI * 2);
     radians_per_pixel = fov / WINDOW_WIDTH;
@@ -440,6 +505,7 @@ void setup(void) {
     reset_player();
     reset_grid_cam();
     calc_grid_cam_center();
+    enter_fps_view();
 
     #define mobj_flat(x, y, spr_num) mobj_create(x * GRID_SPACING, y * GRID_SPACING, spr_num)
     #define mobj_rot(x, y, angle, spr_num) rot_mobj_create(x * GRID_SPACING, y * GRID_SPACING, angle, spr_num)
@@ -460,46 +526,56 @@ void setup(void) {
     mobj_create(732 + 8, 1104 + 32, 0);
 
     mobj_create(610, 185, 1); */
-    mobj_create(light.x, light.y, 2);
+
+    //mobj_create(light.x, light.y, 2);
+    mobj_create(MOBJ_STATIC, 4 * GRID_SPACING, 3 * GRID_SPACING, 0, 0, SPRITE_GUY, 0);
+    mobj_create(MOBJ_STATIC, light.x, light.y, 0, 0, SPRITE_LIGHT, 0);
 }
 
 #define key_pressed(key) state[key]
+#define key(x) SDL_SCANCODE_##x
 bool prev_state[SDL_SCANCODE_COUNT];
-int key_just_pressed(int scancode) {
-    return state[scancode] && !prev_state[scancode];
-}
+#define key_just_pressed(scancode) (state[scancode] && !prev_state[scancode])
 
 void process_input(void) {
+    // Reset mouse pos to center if we are in mouse control cam mode
+    if (SDL_GetWindowRelativeMouseMode(window)) {
+        mouse_x = WINDOW_WIDTH / 2;
+    }
+
     SDL_Event event;
-    SDL_PollEvent(&event);
+    char key = 0;
+    while (SDL_PollEvent(&event)) {
+        switch (event.type) {
+            case SDL_EVENT_QUIT:
+                game_is_running = FALSE;
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+                if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = FALSE;
+                break;
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = TRUE;
+                break;
+            case SDL_EVENT_MOUSE_WHEEL:
+                zoom_grid_cam_center(-event.wheel.y * grid_cam_zoom_incr);
+                break;
+            case SDL_EVENT_MOUSE_MOTION:
+                mouse_x = event.motion.x;
+                mouse_y = event.motion.y;
 
-    switch (event.type) {
-        case SDL_EVENT_QUIT:
-            game_is_running = FALSE;
-            break;
-        case SDL_EVENT_MOUSE_BUTTON_UP:
-            if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = FALSE;
-            break;
-        case SDL_EVENT_MOUSE_BUTTON_DOWN:
-            if (event.button.button == SDL_BUTTON_LEFT) left_mouse_down = TRUE;
-            break;
-        case SDL_EVENT_MOUSE_WHEEL:
-            zoom_grid_cam_center(-event.wheel.y * grid_cam_zoom_incr);
-            break;
-        case SDL_EVENT_MOUSE_MOTION:
-            mouse_x = event.motion.x;
-            mouse_y = event.motion.y;
-            if (show_mouse_coords) {
-                grid_mouse_x = grid_cam_x + (event.motion.x / grid_cam_zoom);
-                grid_mouse_y = grid_cam_y + (event.motion.y / grid_cam_zoom);
-            }
+                if (show_mouse_coords) {
+                    grid_mouse_x = grid_cam_x + (event.motion.x / grid_cam_zoom);
+                    grid_mouse_y = grid_cam_y + (event.motion.y / grid_cam_zoom);
+                }
 
-            if (prev_mouse_x != -1 && prev_mouse_y != -1 && left_mouse_down) {
-                grid_cam_x -= (mouse_x - prev_mouse_x) / grid_cam_zoom;
-                grid_cam_y -= (mouse_y - prev_mouse_y) / grid_cam_zoom;
-            }
-            prev_mouse_x = mouse_x;
-            prev_mouse_y = mouse_y;
+                if (prev_mouse_x != -1 && prev_mouse_y != -1 && left_mouse_down) {
+                    grid_cam_x -= (mouse_x - prev_mouse_x) / grid_cam_zoom;
+                    grid_cam_y -= (mouse_y - prev_mouse_y) / grid_cam_zoom;
+                }
+                break;
+            case SDL_EVENT_KEY_DOWN:
+                key = event.key.key;
+        }
     }
 
     shift = state[SDL_SCANCODE_LSHIFT] || state[SDL_SCANCODE_RSHIFT];
@@ -507,13 +583,12 @@ void process_input(void) {
     if (state[SDL_SCANCODE_ESCAPE]) game_is_running = FALSE;
 
     if (key_just_pressed(SDL_SCANCODE_SLASH)) {
-        if (view == VIEW_TERMINAL) set_view(prev_view);
-        else set_view(VIEW_TERMINAL);
+        toggle_terminal_view();
     }
 
     if (view == VIEW_FPS || view == VIEW_GRID) {
-        if (key_just_pressed(SDL_SCANCODE_2)) set_view(VIEW_GRID);
-        if (key_just_pressed(SDL_SCANCODE_1)) set_view(VIEW_FPS);
+        if (key_just_pressed(SDL_SCANCODE_2)) enter_grid_view();
+        if (key_just_pressed(SDL_SCANCODE_1)) enter_fps_view();
         if (key_just_pressed(SDL_SCANCODE_C)) toggle(&grid_follow_player);
 
         if (state[SDL_SCANCODE_RIGHT]) rotation_input++;
@@ -537,7 +612,9 @@ void process_input(void) {
         
         // Shots
         if (key_just_pressed(KEY_SHOT)) {
-            shot_create(player_x, player_y, GRID_SPACING, player_angle);
+            //shot_create(player_x, player_y, GRID_SPACING, player_angle);
+            sound_play_pos_mobj(sound_effect, 1.0f, mobj_head);
+            //sound_play_pos_static(sound_effect, 1.0f, 0, 0, 0);
         }
 
         // Door opening and closing
@@ -561,9 +638,7 @@ void process_input(void) {
             }
         }
 
-    } else if (view == VIEW_TERMINAL && event.type == SDL_EVENT_KEY_DOWN) {
-        char key = event.key.key;
-
+    } else if (view == VIEW_TERMINAL && key != 0) {
         // If the shift key is pressed, look for a shifted character corresponding
         // with the key pressed and use if found
         // (only characters used in the font are included in BF_CHAR_KEYS)
@@ -572,15 +647,11 @@ void process_input(void) {
             if (new_key != -1) {
                 alstring_append(terminal_input, new_key);
             }
-        }
-
-        // If the key is space or in the character set, add it to the input string
-        else if (key == ' ' || BF_GetCharIndex(key) != -1) {
+        } else if (key == ' ' || BF_GetCharIndex(key) != -1) {
+            // If the key is space or in the character set, add it to the input string
             alstring_append(terminal_input, key);
-        }
-
-        // If backspace is pressed, delete
-        else if (state[SDL_SCANCODE_BACKSPACE]) {
+        } else if (state[SDL_SCANCODE_BACKSPACE]) {
+            // If backspace is pressed, delete
             alstring_pop(terminal_input);
         }
 
@@ -603,7 +674,7 @@ void update(void) {
     int time_to_wait = FRAME_TARGET_TIME - (SDL_GetTicks() - last_frame_time);
 
     // Only delay if we are too fast to update this frame
-    if (time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME) {
+    if (cap_fps && time_to_wait > 0 && time_to_wait <= FRAME_TARGET_TIME) {
         SDL_Delay(time_to_wait);
     }
     // Get a delta time factor converted to seconds to be used to update my objects
@@ -631,7 +702,15 @@ void update(void) {
 
     push_player_forward(player_movement_accel * vertical_input * delta_time);
     push_player_right(player_movement_accel * horizontal_input * delta_time);
-    rotate_player(rotation_input * player_angle_increment * player_rotation_speed * delta_time);
+
+    if (view == VIEW_FPS) {
+        rotate_player((mouse_x - (WINDOW_WIDTH / 2)) * player_sensitivity * delta_time);
+        // Reset mouse to center of screen
+        SDL_WarpMouseInWindow(window, WINDOW_WIDTH / 2, WINDOW_HEIGHT / 2);
+    } else {
+        rotate_player(rotation_input * player_rotation_speed * delta_time);
+    }
+
 
     // Calculate velocity angle
     player_velocity_angle = atan(player_y_velocity / player_x_velocity);
@@ -792,10 +871,6 @@ void update(void) {
         grid_cam_y = player_y - ((WINDOW_HEIGHT / 2) / grid_cam_zoom);
     }
 
-    //printf("%s\n", raycast_to(grid_mouse_x, grid_mouse_y, player_x, player_y) ? "true" : "false");
-    //raycast_to(grid_mouse_x, grid_mouse_y, player_x, player_y);
-
-
     static float ang = 0;
     ang += (180 * (M_PI / 180)) * delta_time;
     if (ang >= M_PI * 2) {
@@ -805,9 +880,22 @@ void update(void) {
     mobj_head->x = light.x + cosf(ang) * DIST;
     mobj_head->y = light.y + sinf(ang) * DIST;
 
+    sound_clear_finished();
+
+    // Update positional sounds
+    //for (pos_sound *s = pos_sound_head; s; s = s->next) {
+    if (frames % 5 == 0) {
+        for (pos_sound *s = pos_sound_head; s; s = s->next) {
+            sound_update_pos_pan(s);
+        }
+    }
+
     vertical_input = 0;
     horizontal_input = 0;
     rotation_input = 0;
+    prev_mouse_x = mouse_x;
+    prev_mouse_y = mouse_y;
+    frames++;
 }
 
 void render(void) {
@@ -820,8 +908,10 @@ void render(void) {
         float *floor_side_dists = NULL;
         int floor_side_dists_len = 0;
 
-        float relative_ray_angle = -fov / 2;
+        // Offset by half a radian pixel so that raycast goes up the center of the pixel col
+        float relative_ray_angle = (-fov + radians_per_pixel) / 2;
         int sky_start = -1;
+        //Uint64 millis = SDL_GetTicks();
         // Raycast, draw walls, draw floors
         for (int ray_i = 0; ray_i < WINDOW_WIDTH; ray_i++) {
             // Calculate ray angle
@@ -898,14 +988,18 @@ void render(void) {
                     int end_draw = end_floor > end_ceiling ? end_floor : end_ceiling;
 
                     float ceil_dist_factor = (GRID_SPACING - player_height) / player_height;
+                    #if ANTI_ALIASING_LEVEL == 1
+                    float pixel_y_worldspace = WORLDSPACE / 2;
+                    #else
                     float pixel_y_worldspace = 0;
+                    #endif
                     for (int pixel_y = 0; pixel_y < end_draw; pixel_y++) {
                         // Optimization possible:
                         // Calculate for floor or height distance depending on which will be calculated the most
                         // number of times so that conversion isn't necessary when only the side that needs conversion
                         // is being calculated.
-                        // Performance impact would be minimal.
 
+                        #if ANTI_ALIASING_LEVEL == 1
                         if (pixel_y == floor_side_dists_len) {
                             // If we have not calculated this distance yet, do so and store
                             floor_side_dists = realloc(floor_side_dists, ++floor_side_dists_len * sizeof(float));
@@ -983,13 +1077,140 @@ void render(void) {
                                 set_pixel_rgb(ray_i, pixel_y, color);
                             }
                         }
+                        #else
+                        Uint16 r_sum_floor = 0;
+                        Uint16 g_sum_floor = 0;
+                        Uint16 b_sum_floor = 0;
+                        Uint16 r_sum_ceil = 0;
+                        Uint16 g_sum_ceil = 0;
+                        Uint16 b_sum_ceil = 0;
+                        char calc_dist = pixel_y == (floor_side_dists_len / ANTI_ALIASING_LEVEL);
+                        #define AA_WORLDSPACE_INCR (WORLDSPACE / (ANTI_ALIASING_LEVEL + 1))
 
-                        pixel_y_worldspace += (float) GRID_SPACING / WINDOW_HEIGHT;
+                        // Perform anti-aliasing: get average of colors found in seperate places in the same pixel
+                        for (int i = 0; i < ANTI_ALIASING_LEVEL; i++) {
+                            if (calc_dist) {
+                                // If we have not calculated this distance yet, do so and store
+                                floor_side_dists = realloc(floor_side_dists, ++floor_side_dists_len * sizeof(float));
+                                floor_side_dists[pixel_y + i] = (player_height / ((GRID_SPACING / 2) - (pixel_y_worldspace + (i * AA_WORLDSPACE_INCR)))) * fp_scale;
+                            }
+                            float floor_side_dist = floor_side_dists[pixel_y + i];
+
+                            if (pixel_y < end_floor) {
+                                float straight_dist = floor_side_dist / rel_cos;
+                                
+                                float point_x = (angle_cos * straight_dist) + player_x;
+                                float point_y = (angle_sin * straight_dist) + player_y;
+
+                                Uint8 texture_num = floor_textures[(int) point_y / GRID_SPACING][(int) point_x / GRID_SPACING];
+                                
+                                // If we are drawing the sky texture
+                                if (texture_num == 0) {
+                                    int sky_x = sky_start + ray_i;
+                                    if (sky_x >= pixel_fov_circumference) {
+                                        sky_x -= pixel_fov_circumference;
+                                    }
+
+                                    rgba color = get_array_sprite(array_sprites[0], (int) (sky_x * sky_scale_x), (int) (pixel_y * sky_scale_y));
+                                    //set_pixel_rgba(ray_i, WINDOW_HEIGHT - pixel_y - 1, color);
+                                    r_sum_floor += color.r;
+                                    g_sum_floor += color.g;
+                                    b_sum_floor += color.b;
+                                
+                                // If we are drawing a floor texture
+                                } else {
+                                    int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                                    int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+
+                                    // Offset texture num by one because texture zero is the sky texture num
+                                    #if !SLOW_LIGHTING
+                                    rgb color = shade_rgb(textures[texture_num - 1][texture_y][texture_x], floor_side_dist);
+                                    
+                                    //set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, color);
+                                    r_sum_floor += color.r;
+                                    g_sum_floor += color.g;
+                                    b_sum_floor += color.b;
+                                    #else
+                                    rgb original_color = textures[texture_num - 1][texture_y][texture_x];
+                                    float light_dist = point_dist(point_x, point_y, mobj_head->x, mobj_head->y) * 2;
+                                    if (light_dist < FP_RENDER_DISTANCE && raycast_to(point_x, point_y, mobj_head->x, mobj_head->y)) {
+                                        set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, shade_rgb(original_color, light_dist));
+                                    } else {
+                                        set_pixel_rgb(ray_i, WINDOW_HEIGHT - pixel_y - 1, shade_rgb(original_color, FP_RENDER_DISTANCE * 0.9f));
+                                    }
+                                    #endif
+                                }
+                            }
+
+                            if (pixel_y < end_ceiling) {
+                                float ceil_side_dist = floor_side_dist * ceil_dist_factor;
+                                float straight_dist = ceil_side_dist / rel_cos;
+
+                                float point_x = (angle_cos * straight_dist) + player_x;
+                                float point_y = (angle_sin * straight_dist) + player_y;
+
+                                Uint8 texture_num = ceiling_textures[(int) point_y / GRID_SPACING][(int) point_x / GRID_SPACING];
+                                
+                                // If we are drawing the sky texture
+                                if (texture_num == 0) {
+                                    int sky_x = sky_start + ray_i;
+                                    if (sky_x >= pixel_fov_circumference) {
+                                        sky_x -= pixel_fov_circumference;
+                                    }
+
+                                    rgba color = get_array_sprite(array_sprites[0], (int) (sky_x * sky_scale_x), (int) (pixel_y * sky_scale_y));
+                                    //set_pixel_rgba(ray_i, pixel_y, color);
+                                    r_sum_ceil += color.r;
+                                    g_sum_ceil += color.g;
+                                    b_sum_ceil += color.b;
+                                
+                                // If we are drawing a ceiling texture
+                                } else {
+                                    int texture_x = fmodf(point_x, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+                                    int texture_y = fmodf(point_y, GRID_SPACING) * ((float) TEXTURE_WIDTH / GRID_SPACING);
+
+                                    // Offset texture num by one because texture zero is the sky texture num
+                                    rgb color = shade_rgb(textures[texture_num - 1][texture_y][texture_x], ceil_side_dist);
+                                    //set_pixel_rgb(ray_i, pixel_y, color);
+                                    r_sum_ceil += color.r;
+                                    g_sum_ceil += color.g;
+                                    b_sum_ceil += color.b;
+                                }
+                            }
+                        }
+
+                        // Take average of colors
+                        // Rounding has not been used for performance reasons
+                        if (pixel_y < end_floor) {
+                            set_pixel_rgb(
+                                ray_i, WINDOW_HEIGHT - pixel_y - 1, 
+                                (rgb) {
+                                    r_sum_floor / ANTI_ALIASING_LEVEL,
+                                    g_sum_floor / ANTI_ALIASING_LEVEL,
+                                    b_sum_floor / ANTI_ALIASING_LEVEL
+                                }
+                            );
+                        }
+                        if (pixel_y < end_ceiling) {
+                            set_pixel_rgb(
+                                ray_i, pixel_y,
+                                (rgb) {
+                                    r_sum_ceil / ANTI_ALIASING_LEVEL,
+                                    g_sum_ceil / ANTI_ALIASING_LEVEL,
+                                    b_sum_ceil / ANTI_ALIASING_LEVEL
+                                }
+                            );
+                        }
+                        #endif
+
+                        pixel_y_worldspace += WORLDSPACE;
                     }
                     #endif
                 }
             }
         }
+
+        //printf("%llu\n", SDL_GetTicks() - millis);
 
         if (floor_side_dists_len != 0) {
             free(floor_side_dists);
@@ -1000,14 +1221,7 @@ void render(void) {
         if (view == VIEW_FPS || grid_casting) {
             // Store positions and distances of sprites on screen sorted by distance
             for (mobj *o = mobj_head; o; o = o->next) {
-                add_sprite_proj(o->x, o->y, o->sprite_num);           
-            }
-
-            for (rot_mobj *o = rot_mobj_head; o; o = o->next) {
-                float angle_to = get_angle_from_player(o->x, o->y);
-                float relative_angle = player_angle + o->angle + (rot_sprite_incr / 2);
-                if (relative_angle > M_PI * 2) relative_angle -= M_PI * 2;
-                add_sprite_proj_angle(o->x, o->y, angle_to, o->sprite_num + (int) (relative_angle / rot_sprite_incr));
+                add_sprite_proj_mobj(o);
             }
 
             // Give sprites to shots
@@ -1015,7 +1229,7 @@ void render(void) {
                 float x = s->x1;
                 float y = s->y1;
                 for (int i = 0; i < SHOT_SPRITE_COUNT; i++) {
-                    add_sprite_proj(x, y, SPRITE_SHOT);
+                    add_sprite_proj(x, y, (GRID_SPACING / 2), SPRITE_SHOT);
                     x += s->x_spr_incr;
                     y += s->y_spr_incr;
                 }
@@ -1051,7 +1265,8 @@ void render(void) {
                     start_x = 0;
                 }
 
-                float start_y_f = (WINDOW_HEIGHT - sprite_height) / 2;
+                //float start_y_f = (WINDOW_HEIGHT - sprite_height) / 2;
+                float start_y_f = ((WINDOW_HEIGHT + proj_height) / 2) - sprite_height - ((sprite->z / GRID_SPACING) * proj_height);
                 start_y_f += player_height_y_offset(proj_height);
                 
                 int start_y = roundf(start_y_f);
@@ -1162,10 +1377,6 @@ void render(void) {
             g_draw_scale_point_rgb(temp->x, temp->y, grid_mobj_radius, grid_mobj_color);
         }
 
-        for (rot_mobj *temp = rot_mobj_head; temp; temp = temp->next) {
-            g_draw_scale_point_rgb(temp->x, temp->y, grid_mobj_radius, grid_mobj_color);
-        }
-
         // Shots
         for (shot *s = shot_head; s; s = s->next) {
             g_draw_scale_point_rgb(s->x1, s->y1, 2.5f, C_ORANGE);
@@ -1231,6 +1442,23 @@ void render(void) {
     num_temp_dgps = 0;
     num_dgls = 0;
 
+    #if APPLY_BLUR
+    for (int row = 0; row < WINDOW_HEIGHT; row += 2) {
+        for (int col = 0; col < WINDOW_WIDTH; col += 2) {
+            rgba avg = {
+                (pixel_array[row][col].r + pixel_array[row + 1][col].r + pixel_array[row][col + 1].r + pixel_array[row + 1][col + 1].r) / 4.0f,
+                (pixel_array[row][col].g + pixel_array[row + 1][col].g + pixel_array[row][col + 1].g + pixel_array[row + 1][col + 1].g) / 4.0f,
+                (pixel_array[row][col].b + pixel_array[row + 1][col].b + pixel_array[row][col + 1].b + pixel_array[row + 1][col + 1].b) / 4.0f,
+                255
+            };
+            pixel_array[row][col] = avg;
+            pixel_array[row + 1][col] = avg;
+            pixel_array[row][col + 1] = avg;
+            pixel_array[row + 1][col + 1] = avg;
+        }
+    }
+    #endif
+
     present_array_window();
     SDL_RenderPresent(renderer);
 }
@@ -1246,7 +1474,6 @@ void free_memory(void) {
 
     alstring_destroy(terminal_input);
     mobj_destroy_all();
-    rot_mobj_destroy_all();
     shot_destroy_all();
 }
 
@@ -1265,24 +1492,26 @@ int main() {
 
     initialize_array_window();
     setup();
-    debugging_start();
+    init_debugging();
 
     emscripten_set_main_loop(main_loop, 0, 1);
 
     debugging_end();
     destroy_window();
     destroy_array_window();
-    free_memory();    
+    free_memory();
+
+    return 0;
 }
 #else
 int main() {
     printf("Start\n");
 
-    game_is_running = initialize_window("Raycasting");
+    game_is_running = initialize_window(SDL_INIT_VIDEO | SDL_INIT_AUDIO, "Raycasting");
     initialize_array_window();
 
     setup();
-    debugging_start();
+    init_debugging();
 
     while (game_is_running) {
         process_input();
